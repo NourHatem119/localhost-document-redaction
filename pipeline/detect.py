@@ -60,6 +60,31 @@ _PATTERNS: List[tuple] = [
 ]
 
 
+def _drop_contained(spans: List[PIISpan]) -> List[PIISpan]:
+    """Drop spans fully contained within a larger span of the same type.
+
+    Two patterns can match overlapping text — e.g. the postcode pattern matches
+    "B15 3DH" while the street pattern matches the whole "5 Elmwood Court,
+    Birmingham, B15 3DH". The embedded postcode is redundant: keep the wider
+    address span so it resolves to a single entity (one pseudonym). A standalone
+    postcode elsewhere is not contained by anything and survives.
+    """
+    kept: List[PIISpan] = []
+    for s in spans:
+        s_len = s.char_end - s.char_start
+        contained = any(
+            o is not s
+            and o.type == s.type
+            and o.char_start <= s.char_start
+            and o.char_end >= s.char_end
+            and (o.char_end - o.char_start) > s_len
+            for o in spans
+        )
+        if not contained:
+            kept.append(s)
+    return kept
+
+
 def detect_regex(text: str, doc_id: str) -> List[PIISpan]:
     """Run compiled regex patterns over the full document text."""
     spans: List[PIISpan] = []
@@ -79,7 +104,7 @@ def detect_regex(text: str, doc_id: str) -> List[PIISpan]:
                     status="auto",
                 )
             )
-    return spans
+    return _drop_contained(spans)
 
 
 def _find_text_in_chunk(text: str, search: str) -> int:

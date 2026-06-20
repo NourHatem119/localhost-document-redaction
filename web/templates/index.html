@@ -3,604 +3,748 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Obscura — Local Document Redaction</title>
+    <title>Obscura — On-Device Document Redaction</title>
     <style>
         :root {
-            --bg: #0f0f0f;
-            --card: #1a1a1a;
-            --border: #2a2a2a;
-            --text: #e0e0e0;
-            --muted: #888;
-            --accent: #3b82f6;
-            --accent-dim: #1e3a5f;
-            --error: #ef4444;
-            --success: #22c55e;
-            --warning: #f59e0b;
+            --bg: #05070d;
+            --bg-2: #080b14;
+            --text: #e8edf6;
+            --muted: #8a93a6;
+            --faint: #5b6478;
+            --line: rgba(255,255,255,0.08);
+            --glass: rgba(255,255,255,0.035);
+            --glass-strong: rgba(255,255,255,0.06);
+
+            --accent: #5b9dff;     /* primary blue */
+            --exo: #818cf8;        /* EXO — indigo */
+            --exo-deep: #4f46e5;
+            --cognee: #2dd4bf;     /* Cognee — teal */
+            --cognee-deep: #0d9488;
+            --regex: #60a5fa;
+            --success: #34d399;
+            --warning: #fbbf24;
+            --error: #f87171;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif;
             background: var(--bg);
             color: var(--text);
             min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            position: relative;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
         }
+        /* Ambient background glows */
+        body::before, body::after {
+            content: "";
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(120px);
+            z-index: 0;
+            pointer-events: none;
+            opacity: 0.5;
+        }
+        body::before {
+            width: 600px; height: 600px;
+            background: radial-gradient(circle, rgba(99,102,241,0.35), transparent 70%);
+            top: -200px; left: -120px;
+        }
+        body::after {
+            width: 520px; height: 520px;
+            background: radial-gradient(circle, rgba(45,212,191,0.22), transparent 70%);
+            bottom: -180px; right: -100px;
+        }
+        .grid-overlay {
+            position: fixed; inset: 0; z-index: 0; pointer-events: none;
+            background-image:
+                linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+            background-size: 48px 48px;
+            mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 30%, transparent 80%);
+        }
+        main { position: relative; z-index: 2; }
+        header { position: sticky; top: 0; z-index: 100; }
+
+        /* ---------- Header ---------- */
         header {
             width: 100%;
-            padding: 24px 40px;
-            border-bottom: 1px solid var(--border);
+            padding: 20px 36px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            border-bottom: 1px solid var(--line);
+            background: rgba(5,7,13,0.6);
+            backdrop-filter: blur(14px);
+            position: sticky; top: 0;
         }
-        .logo { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+        .logo { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; color: var(--text); text-decoration: none; }
         .logo span { color: var(--accent); }
-        .status {
-            font-size: 13px;
-            color: var(--muted);
-            display: flex;
-            align-items: center;
-            gap: 8px;
+        .nav { display: flex; align-items: center; gap: 26px; }
+        .nav a { color: var(--muted); text-decoration: none; font-size: 14px; transition: color .2s; }
+        .nav a:hover { color: var(--text); }
+        .pills { display: flex; gap: 10px; align-items: center; }
+        .pill {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 6px 12px; border-radius: 999px;
+            background: var(--glass); border: 1px solid var(--line);
+            font-size: 12px; color: var(--muted);
         }
-        .status-dot {
-            width: 8px; height: 8px; border-radius: 50%;
-            background: var(--muted);
+        .pill b { color: var(--text); font-weight: 600; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); position: relative; }
+        .dot.live { background: var(--success); box-shadow: 0 0 0 0 rgba(52,211,153,0.6); animation: pulse 2s infinite; }
+        .dot.exo.live { background: var(--exo); box-shadow: 0 0 0 0 rgba(129,140,248,0.6); }
+        .dot.cog.live { background: var(--cognee); box-shadow: 0 0 0 0 rgba(45,212,191,0.6); }
+        .dot.off { background: var(--error); }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(52,211,153,0.5); }
+            70% { box-shadow: 0 0 0 7px rgba(52,211,153,0); }
+            100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); }
         }
-        .status-dot.ok { background: var(--success); }
-        .status-dot.error { background: var(--error); }
-        main {
-            width: 100%;
-            max-width: 720px;
-            padding: 40px 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 24px;
+
+        main { max-width: 940px; margin: 0 auto; padding: 48px 24px 80px; display: flex; flex-direction: column; gap: 28px; }
+
+        /* ---------- Hero ---------- */
+        .hero { text-align: center; padding: 12px 0 8px; }
+        .badge {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 6px 14px; border-radius: 999px;
+            background: var(--glass); border: 1px solid var(--line);
+            font-size: 12px; color: var(--muted); margin-bottom: 22px;
         }
-        .dropzone {
-            border: 2px dashed var(--border);
-            border-radius: 12px;
-            padding: 48px 32px;
+        .badge .plane { color: var(--cognee); }
+        .hero h1 {
+            font-size: 46px; line-height: 1.07; font-weight: 800; letter-spacing: -1.5px;
+            margin-bottom: 16px;
+            background: linear-gradient(180deg, #ffffff, #aeb8cc);
+            -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .hero h1 em { font-style: normal; background: linear-gradient(90deg, var(--exo), var(--cognee)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+        .hero p { color: var(--muted); font-size: 16px; max-width: 580px; margin: 0 auto; line-height: 1.6; }
+
+        /* ---------- Engine (EXO -> Cognee -> Redact) ---------- */
+        .engine {
+            background: linear-gradient(180deg, var(--glass-strong), var(--glass));
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            padding: 26px 22px;
+            position: relative;
+            overflow: hidden;
+        }
+        .engine-label {
+            position: absolute; top: 14px; left: 18px;
+            font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--faint);
+        }
+        .engine-flow {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr auto 1fr;
+            align-items: stretch; gap: 0;
+            margin-top: 18px;
+        }
+        .node {
+            border-radius: 14px;
+            padding: 18px 16px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid var(--line);
             text-align: center;
-            transition: all 0.2s;
+            transition: all .35s ease;
+            position: relative;
+        }
+        .node .ntag { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--faint); margin-bottom: 8px; }
+        .node .nicon { font-size: 24px; display: block; margin-bottom: 8px; filter: grayscale(0.2); }
+        .node .ntitle { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+        .node .nsub { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+        .node .nmeta { font-size: 11px; margin-top: 9px; color: var(--faint); font-variant-numeric: tabular-nums; min-height: 14px; }
+
+        .node.detect { box-shadow: inset 0 0 0 1px rgba(129,140,248,0.0); }
+        .node.detect.active { border-color: rgba(129,140,248,0.55); box-shadow: 0 0 30px rgba(129,140,248,0.18), inset 0 0 0 1px rgba(129,140,248,0.3); background: rgba(129,140,248,0.06); }
+        .node.detect.done .nicon { filter: none; }
+        .node.detect.active .nicon, .node.detect.done .nicon { color: var(--exo); }
+
+        .node.remember.active { border-color: rgba(45,212,191,0.55); box-shadow: 0 0 30px rgba(45,212,191,0.18), inset 0 0 0 1px rgba(45,212,191,0.3); background: rgba(45,212,191,0.06); }
+        .node.remember.active .nicon, .node.remember.done .nicon { color: var(--cognee); }
+
+        .node.redact.active { border-color: rgba(91,157,255,0.55); box-shadow: 0 0 30px rgba(91,157,255,0.18), inset 0 0 0 1px rgba(91,157,255,0.3); background: rgba(91,157,255,0.06); }
+        .node.redact.active .nicon, .node.redact.done .nicon { color: var(--accent); }
+
+        .node .checkmark {
+            position: absolute; top: 10px; right: 12px;
+            font-size: 12px; color: var(--success); opacity: 0; transform: scale(0.6);
+            transition: all .3s;
+        }
+        .node.done .checkmark { opacity: 1; transform: scale(1); }
+
+        /* connector */
+        .connector { width: 56px; display: flex; align-items: center; justify-content: center; position: relative; }
+        .wire { width: 100%; height: 2px; background: var(--line); border-radius: 2px; position: relative; overflow: hidden; }
+        .wire .flow {
+            position: absolute; top: 0; left: -40%; width: 40%; height: 100%;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+            opacity: 0;
+        }
+        .connector.c1 .flow { background: linear-gradient(90deg, transparent, var(--exo), var(--cognee)); }
+        .connector.c2 .flow { background: linear-gradient(90deg, transparent, var(--cognee), var(--accent)); }
+        .connector.flowing .flow { opacity: 1; animation: travel 1.1s linear infinite; }
+        @keyframes travel { from { left: -40%; } to { left: 100%; } }
+
+        /* short-circuit banner */
+        .short {
+            margin-top: 20px;
+            border-radius: 12px;
+            padding: 14px 16px;
+            font-size: 13.5px; line-height: 1.5;
+            display: none; align-items: flex-start; gap: 10px;
+            background: linear-gradient(90deg, rgba(45,212,191,0.10), rgba(129,140,248,0.08));
+            border: 1px solid rgba(45,212,191,0.25);
+        }
+        .short.show { display: flex; }
+        .short .bolt { font-size: 16px; line-height: 1.2; }
+        .short b { color: var(--cognee); }
+        .short .exoref { color: var(--exo); font-weight: 600; }
+
+        /* ---------- Dropzone ---------- */
+        .dropzone {
+            border: 1.5px dashed var(--line);
+            border-radius: 18px;
+            padding: 44px 32px;
+            text-align: center;
             cursor: pointer;
-            background: var(--card);
+            transition: all .25s;
+            background: var(--glass);
+            position: relative;
         }
         .dropzone:hover, .dropzone.dragover {
             border-color: var(--accent);
-            background: var(--accent-dim);
+            background: rgba(91,157,255,0.06);
+            box-shadow: 0 0 40px rgba(91,157,255,0.1);
         }
-        .dropzone h2 { font-size: 18px; margin-bottom: 8px; font-weight: 500; }
-        .dropzone p { font-size: 14px; color: var(--muted); }
+        .dropzone .arrow {
+            width: 54px; height: 54px; margin: 0 auto 14px;
+            border-radius: 14px; display: flex; align-items: center; justify-content: center;
+            background: linear-gradient(135deg, rgba(129,140,248,0.18), rgba(45,212,191,0.14));
+            border: 1px solid var(--line); font-size: 24px;
+        }
+        .dropzone h2 { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+        .dropzone p { font-size: 13.5px; color: var(--muted); }
+        .dropzone .samples { margin-top: 14px; font-size: 12px; color: var(--faint); }
         .dropzone input { display: none; }
-        .progress-card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 24px;
+
+        /* ---------- Cards ---------- */
+        .card {
+            background: var(--glass);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 22px 24px;
             display: none;
         }
-        .progress-card.active { display: block; }
-        .progress-bar {
-            height: 6px;
-            background: var(--border);
-            border-radius: 3px;
-            overflow: hidden;
-            margin: 12px 0;
+        .card.active { display: block; animation: rise .35s ease; }
+        @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+        .card h3 { font-size: 15px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+        .card h3 .count { color: var(--muted); font-weight: 500; }
+
+        /* progress */
+        .prog-head { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+        .prog-head b { color: var(--text); font-weight: 600; }
+        .bar { height: 7px; background: rgba(255,255,255,0.06); border-radius: 4px; overflow: hidden; }
+        .bar > div { height: 100%; width: 0; border-radius: 4px; background: linear-gradient(90deg, var(--exo), var(--cognee)); transition: width .35s ease; }
+
+        /* stat grid */
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px,1fr)); gap: 12px; margin-top: 18px; }
+        .stat {
+            background: rgba(255,255,255,0.025); border: 1px solid var(--line);
+            border-radius: 12px; padding: 14px 12px; text-align: center;
         }
-        .progress-bar-fill {
-            height: 100%;
-            background: var(--accent);
-            border-radius: 3px;
-            transition: width 0.3s ease;
-            width: 0%;
+        .stat .v { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+        .stat .l { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-top: 5px; }
+        .stat.exo .v { color: var(--exo); }
+        .stat.cog .v { color: var(--cognee); }
+        .stat.acc .v { color: var(--accent); }
+        .stat.rgx .v { color: var(--regex); }
+
+        /* spans */
+        .span-list { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; }
+        .span {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 11px 14px; background: rgba(255,255,255,0.02); border: 1px solid var(--line);
+            border-radius: 10px; font-size: 14px;
         }
-        .progress-info {
-            display: flex;
-            justify-content: space-between;
-            font-size: 13px;
-            color: var(--muted);
+        .span .txt { font-family: 'SF Mono', ui-monospace, monospace; font-size: 13px; color: var(--text); }
+        .tag { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.5px; padding: 4px 9px; border-radius: 6px; font-weight: 700; }
+        .tag.regex { background: rgba(96,165,250,0.14); color: var(--regex); }
+        .tag.llm { background: rgba(129,140,248,0.16); color: var(--exo); }
+        .tag.memory { background: rgba(45,212,191,0.14); color: var(--cognee); }
+
+        /* mapping */
+        .map-list { display: flex; flex-direction: column; gap: 8px; }
+        .map {
+            display: flex; justify-content: space-between; align-items: center; gap: 12px;
+            padding: 12px 14px; background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 10px;
         }
-        .stages-list {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            margin-top: 16px;
-            font-size: 13px;
+        .map .info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+        .map .mtype { font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--faint); }
+        .map .aliases { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .map .aliases .multi { color: var(--cognee); }
+        .map .pseudo {
+            font-family: 'SF Mono', ui-monospace, monospace; font-size: 12.5px; font-weight: 600;
+            color: var(--cognee); background: rgba(45,212,191,0.1); border: 1px solid rgba(45,212,191,0.2);
+            padding: 6px 10px; border-radius: 8px; white-space: nowrap; flex-shrink: 0;
         }
-        .stage-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 6px 10px;
-            border-radius: 6px;
-            background: var(--bg);
-            opacity: 0.6;
-            transition: opacity 0.2s, background 0.2s;
-        }
-        .stage-item.active {
-            opacity: 1;
-            background: var(--accent-dim);
-        }
-        .stage-item.done {
-            opacity: 1;
-        }
-        .stage-name {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .stage-icon {
-            font-size: 12px;
-        }
-        .stage-detail {
-            color: var(--muted);
-            font-size: 11px;
-        }
-        .spans-card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 24px;
-            display: none;
-        }
-        .spans-card.active { display: block; }
-        .spans-card h3 { font-size: 16px; margin-bottom: 16px; font-weight: 500; }
-        .span-list { display: flex; flex-direction: column; gap: 8px; }
-        .span-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 16px;
-            background: var(--bg);
-            border-radius: 8px;
-            font-size: 14px;
-        }
-        .span-type {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-weight: 600;
-        }
-        .span-type.regex { background: #1e3a5f; color: #60a5fa; }
-        .span-type.llm { background: #1e3f1e; color: #4ade80; }
-        .span-text { color: var(--text); font-family: monospace; font-size: 13px; }
-        .mapping-card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 24px;
-            display: none;
-        }
-        .mapping-card.active { display: block; }
-        .mapping-card h3 { font-size: 16px; margin-bottom: 16px; font-weight: 500; }
-        .mapping-list { display: flex; flex-direction: column; gap: 8px; }
-        .mapping-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 16px;
-            background: var(--bg);
-            border-radius: 8px;
-            font-size: 14px;
-        }
-        .mapping-pseudonym {
-            font-family: monospace;
-            font-size: 12px;
-            color: var(--accent);
-            padding: 4px 8px;
-            border-radius: 4px;
-            background: var(--accent-dim);
-        }
-        .mapping-aliases {
-            font-size: 11px;
-            color: var(--muted);
-            margin-top: 4px;
-        }
-        .mapping-info {
-            display: flex;
-            flex-direction: column;
-            flex: 1;
-            gap: 2px;
-        }
-        .mapping-type {
-            font-size: 10px;
-            text-transform: uppercase;
-            color: var(--muted);
-            letter-spacing: 0.5px;
-        }
-        .actions {
-            display: flex;
-            gap: 12px;
-            margin-top: 16px;
-            flex-wrap: wrap;
-        }
+
+        /* actions */
+        .actions { display: flex; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
         .btn {
-            padding: 10px 20px;
-            border-radius: 8px;
-            border: none;
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: opacity 0.2s;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
+            padding: 11px 20px; border-radius: 10px; border: 1px solid transparent;
+            font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none;
+            display: inline-flex; align-items: center; gap: 8px; transition: all .2s;
         }
-        .btn:hover { opacity: 0.85; }
-        .btn-primary { background: var(--accent); color: white; }
-        .btn-secondary { background: var(--border); color: var(--text); }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .error-card {
-            background: #1f1010;
-            border: 1px solid #3f2020;
-            border-radius: 12px;
-            padding: 24px;
-            display: none;
-            color: var(--error);
+        .btn-primary { background: linear-gradient(135deg, var(--exo-deep), var(--cognee-deep)); color: #fff; }
+        .btn-primary:hover { filter: brightness(1.12); transform: translateY(-1px); }
+        .btn-ghost { background: var(--glass); border-color: var(--line); color: var(--text); }
+        .btn-ghost:hover { background: var(--glass-strong); }
+
+        /* document viewer */
+        .doc-card { position: relative; }
+        .doc-card.wide { width: min(1280px, 94vw); left: 50%; transform: translateX(-50%); }
+        .doc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+        .doc-pane { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+        .doc-label { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--muted); }
+        .doc-label .ld { width: 8px; height: 8px; border-radius: 50%; background: var(--warning); box-shadow: 0 0 8px var(--warning); }
+        .doc-label.red { color: var(--cognee); }
+        .doc-label.red .ld { background: var(--cognee); box-shadow: 0 0 8px var(--cognee); }
+        .doc-frame { width: 100%; height: 600px; border: 1px solid var(--line); border-radius: 12px; background: #fff; overflow: hidden; box-shadow: 0 12px 40px rgba(0,0,0,0.35); }
+        .doc-frame iframe { width: 100%; height: 100%; border: 0; display: block; }
+        .doc-proof { font-size: 12px; color: var(--cognee); display: flex; align-items: center; gap: 6px; }
+        .doc-text { background: #0b0e16; border: 1px solid var(--line); border-radius: 12px; padding: 18px; max-height: 600px; overflow: auto; font-family: 'SF Mono', ui-monospace, monospace; font-size: 12.5px; line-height: 1.75; white-space: pre-wrap; color: var(--text); }
+        .doc-text mark { background: rgba(45,212,191,0.18); color: var(--cognee); border-radius: 4px; padding: 1px 5px; font-weight: 600; }
+        @media (max-width: 820px) {
+            .doc-grid { grid-template-columns: 1fr; }
+            .doc-card.wide { width: 100%; left: 0; transform: none; }
+            .doc-frame { height: 460px; }
         }
-        .error-card.active { display: block; }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 12px;
-            margin-top: 16px;
-        }
-        .stat-box {
-            background: var(--bg);
-            padding: 12px;
-            border-radius: 8px;
-            text-align: center;
-        }
-        .stat-value {
-            font-size: 20px;
-            font-weight: 700;
-            color: var(--accent);
-        }
-        .stat-label {
-            font-size: 11px;
-            color: var(--muted);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-top: 4px;
+
+        /* image redaction */
+        .img-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px,1fr)); gap: 16px; }
+        .img-pair { background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+        .img-pair .row { display: flex; gap: 12px; }
+        .img-pair figure { flex: 1; margin: 0; min-width: 0; }
+        .img-pair figcaption { font-size: 11px; color: var(--muted); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+        .img-pair figcaption .d { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+        .img-pair img { width: 100%; border-radius: 8px; border: 1px solid var(--line); display: block; background: #fff; }
+        .img-pair .meta { font-size: 11.5px; color: var(--cognee); margin-top: 10px; }
+
+        /* process timeline */
+        .timeline { position: relative; padding-left: 28px; }
+        .timeline::before { content: ''; position: absolute; left: 9px; top: 6px; bottom: 6px; width: 2px; background: linear-gradient(var(--exo), var(--cognee), var(--accent)); opacity: 0.35; }
+        .tl-step { position: relative; padding-bottom: 18px; }
+        .tl-step:last-child { padding-bottom: 0; }
+        .tl-dot { position: absolute; left: -28px; top: 0; width: 20px; height: 20px; border-radius: 50%; background: var(--bg-2); border: 2px solid var(--cognee); box-shadow: 0 0 10px rgba(45,212,191,0.35); display: flex; align-items: center; justify-content: center; font-size: 10px; }
+        .tl-title { font-size: 13.5px; font-weight: 600; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+        .tl-time { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--accent); background: rgba(91,157,255,0.1); border: 1px solid rgba(91,157,255,0.22); border-radius: 6px; padding: 2px 8px; white-space: nowrap; }
+        .tl-detail { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.55; }
+
+        .error { background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.3); color: var(--error); border-radius: 14px; padding: 18px 20px; display: none; font-size: 13px; }
+        .error.active { display: block; }
+        .error pre { white-space: pre-wrap; font-size: 11px; margin-top: 8px; color: var(--muted); max-height: 160px; overflow: auto; }
+
+        @media (max-width: 720px) {
+            .hero h1 { font-size: 34px; }
+            .engine-flow { grid-template-columns: 1fr; gap: 10px; }
+            .connector { width: 100%; height: 24px; transform: rotate(90deg); }
         }
     </style>
 </head>
 <body>
+    <div class="grid-overlay"></div>
+
     <header>
-        <div class="logo">obscura<span>.</span></div>
-        <div class="nav-links" style="display: flex; gap: 24px; font-size: 14px;">
-            <a href="/pipeline" style="color: var(--muted); text-decoration: none;">Pipeline</a>
-        </div>
-        <div class="status" id="status">
-            <span class="status-dot" id="status-dot"></span>
-            <span id="status-text">Checking backend...</span>
-        </div>
+        <a href="/" class="logo">obscura<span>.</span></a>
+        <nav class="nav">
+            <a href="/">Redact</a>
+            <a href="/pipeline">Pipeline</a>
+            <div class="pills">
+                <span class="pill" id="pill-exo"><span class="dot exo" id="exo-dot"></span> <b>EXO</b> <span id="exo-text">…</span></span>
+                <span class="pill" id="pill-cog"><span class="dot cog" id="cog-dot"></span> <b>Cognee</b> <span id="cog-text">…</span></span>
+            </div>
+        </nav>
     </header>
 
     <main>
+        <section class="hero">
+            <div class="badge"><span class="plane">✈</span> Airplane mode · 100% on-device · nothing leaves this machine</div>
+            <h1>Documents too sensitive<br>for the cloud — <em>redacted locally.</em></h1>
+            <p>Obscura detects PII with a local <strong style="color:var(--exo)">EXO</strong> model, remembers every entity in a <strong style="color:var(--cognee)">Cognee</strong> memory graph, and permanently deletes it — consistently across every document.</p>
+        </section>
+
+        <!-- The integration engine -->
+        <section class="engine">
+            <span class="engine-label">Detect → Remember → Redact</span>
+            <div class="engine-flow">
+                <div class="node detect" id="node-detect">
+                    <span class="checkmark">✓</span>
+                    <span class="ntag">Detect</span>
+                    <span class="nicon">🧠</span>
+                    <span class="ntitle">Regex + EXO</span>
+                    <span class="nsub">Local Llama model finds names, addresses, orgs. Regex nails structured PII.</span>
+                    <span class="nmeta" id="meta-detect"></span>
+                </div>
+                <div class="connector c1" id="conn1"><div class="wire"><div class="flow"></div></div></div>
+                <div class="node remember" id="node-remember">
+                    <span class="checkmark">✓</span>
+                    <span class="ntag">Remember</span>
+                    <span class="nicon">🕸️</span>
+                    <span class="ntitle">Cognee memory</span>
+                    <span class="nsub">Dedups variants, assigns stable pseudonyms, skips EXO for known entities.</span>
+                    <span class="nmeta" id="meta-remember"></span>
+                </div>
+                <div class="connector c2" id="conn2"><div class="wire"><div class="flow"></div></div></div>
+                <div class="node redact" id="node-redact">
+                    <span class="checkmark">✓</span>
+                    <span class="ntag">Redact</span>
+                    <span class="nicon">⬛</span>
+                    <span class="ntitle">True deletion</span>
+                    <span class="nsub">PyMuPDF removes the text stream — not a black box. Copy-paste returns nothing.</span>
+                    <span class="nmeta" id="meta-redact"></span>
+                </div>
+            </div>
+            <div class="short" id="short"><span class="bolt">⚡</span><span id="short-text"></span></div>
+        </section>
+
+        <!-- Dropzone -->
         <div class="dropzone" id="dropzone">
             <input type="file" id="file-input" accept=".pdf,.docx,.txt">
-            <h2>Drop a document here</h2>
-            <p>PDF, DOCX, or TXT — redacted locally, no cloud</p>
+            <div class="arrow">⤓</div>
+            <h2>Drop a document to redact</h2>
+            <p>PDF, DOCX, or TXT — processed entirely on this machine</p>
+            <div class="samples">Tip: re-drop the same file to watch Cognee recall it instantly</div>
         </div>
 
-        <div class="progress-card" id="progress-card">
-            <div class="progress-info">
-                <span id="progress-status">Waiting...</span>
-                <span id="progress-pct">0%</span>
-            </div>
-            <div class="progress-bar">
-                <div class="progress-bar-fill" id="progress-fill"></div>
-            </div>
-            <div class="stages-list" id="stages-list"></div>
-            <div class="stats-grid" id="stats-grid"></div>
+        <!-- Progress -->
+        <div class="card" id="progress-card">
+            <h3>⚙️ Live pipeline</h3>
+            <div class="prog-head"><span id="prog-status">Waiting…</span><b id="prog-pct">0%</b></div>
+            <div class="bar"><div id="prog-fill"></div></div>
+            <div class="stats" id="stats"></div>
         </div>
 
-        <div class="spans-card" id="spans-card">
-            <h3>Detected PII (<span id="span-count">0</span>)</h3>
+        <!-- Document viewer -->
+        <div class="card doc-card" id="doc-card">
+            <h3>📄 Redacted document <span class="count">— original vs. on-device output</span></h3>
+            <div class="doc-grid" id="doc-grid">
+                <div class="doc-pane">
+                    <div class="doc-label"><span class="ld"></span> Original · PII visible</div>
+                    <div class="doc-frame"><iframe id="view-original" title="Original document"></iframe></div>
+                </div>
+                <div class="doc-pane">
+                    <div class="doc-label red"><span class="ld"></span> Redacted · 100% on-device</div>
+                    <div class="doc-frame"><iframe id="view-redacted" title="Redacted document"></iframe></div>
+                    <div class="doc-proof">🔒 Text permanently deleted from the file — copy-paste returns nothing</div>
+                </div>
+            </div>
+            <div class="doc-text" id="doc-text" style="display:none;"></div>
+        </div>
+
+        <!-- Process timeline -->
+        <div class="card" id="timeline-card">
+            <h3>🧭 What happened <span class="count">— the full on-device process, start to finish</span></h3>
+            <div class="timeline" id="timeline"></div>
+        </div>
+
+        <!-- Detected PII -->
+        <div class="card" id="spans-card">
+            <h3>🔍 Detected PII <span class="count" id="span-count">(0)</span></h3>
             <div class="span-list" id="span-list"></div>
             <div class="actions">
-                <a href="#" class="btn btn-primary" id="download-btn" style="display:none;">
-                    Download Redacted Output
-                </a>
-                <a href="#" class="btn btn-secondary" id="download-text-btn" style="display:none;">
-                    Download Redacted Text
-                </a>
+                <a href="#" class="btn btn-primary" id="dl-btn" style="display:none;">⬇ Download redacted output</a>
+                <a href="#" class="btn btn-ghost" id="dl-text-btn" style="display:none;">⬇ Redacted text</a>
             </div>
         </div>
 
-        <div class="mapping-card" id="mapping-card">
-            <h3>Entity Mapping</h3>
-            <div class="mapping-list" id="mapping-list"></div>
+        <!-- Mapping -->
+        <div class="card" id="map-card">
+            <h3>🕸️ Cognee entity map <span class="count">— one pseudonym per entity, everywhere</span></h3>
+            <div class="map-list" id="map-list"></div>
         </div>
 
-        <div class="error-card" id="error-card">
-            <strong>Error</strong>
-            <p id="error-text"></p>
-        </div>
+        <div class="error" id="error-card"><strong>Something went wrong</strong><pre id="error-text"></pre></div>
     </main>
 
     <script>
-        const dropzone = document.getElementById('dropzone');
-        const fileInput = document.getElementById('file-input');
-        const progressCard = document.getElementById('progress-card');
-        const progressFill = document.getElementById('progress-fill');
-        const progressStatus = document.getElementById('progress-status');
-        const progressPct = document.getElementById('progress-pct');
-        const stagesList = document.getElementById('stages-list');
-        const statsGrid = document.getElementById('stats-grid');
-        const spansCard = document.getElementById('spans-card');
-        const spanList = document.getElementById('span-list');
-        const spanCount = document.getElementById('span-count');
-        const downloadBtn = document.getElementById('download-btn');
-        const downloadTextBtn = document.getElementById('download-text-btn');
-        const mappingCard = document.getElementById('mapping-card');
-        const mappingList = document.getElementById('mapping-list');
-        const errorCard = document.getElementById('error-card');
-        const errorText = document.getElementById('error-text');
-        const statusDot = document.getElementById('status-dot');
-        const statusText = document.getElementById('status-text');
+        const $ = id => document.getElementById(id);
+        const dropzone = $('dropzone'), fileInput = $('file-input');
 
-        // Pipeline stage definitions for the UI.
-        const STAGES = [
-            { key: 'ingesting', label: 'Document Ingestion', icon: '📄' },
-            { key: 'detecting_regex', label: 'Regex Detection', icon: '🔍' },
-            { key: 'checking_memory', label: 'Memory Check (Cognee)', icon: '💾' },
-            { key: 'detecting_llm', label: 'LLM Detection (EXO)', icon: '🧠' },
-            { key: 'redacting_text', label: 'Text Redaction (Cognee)', icon: '✏️' },
-            { key: 'redacting_pdf', label: 'PDF True Redaction', icon: '🚫' },
-            { key: 'building_memory', label: 'Cognee Memory Graph', icon: '📊' },
-        ];
-
-        // Check backend status on load.
-        fetch('/api/status')
-            .then(r => r.json())
-            .then(data => {
-                if (data.status === 'ok') {
-                    statusDot.classList.add('ok');
-                    statusText.textContent = `${data.model} on ${data.endpoint.split('/')[2]}`;
+        // ---------- Backend status ----------
+        function loadStatus() {
+            fetch('/api/status').then(r => r.json()).then(d => {
+                if (d.status === 'ok' && d.llm_enabled) {
+                    $('exo-dot').classList.add('live');
+                    $('exo-text').textContent = (d.model || '').split('/').pop() || 'ready';
                 } else {
-                    statusDot.classList.add('error');
-                    statusText.textContent = data.message || 'Backend not running';
+                    $('exo-dot').classList.add('off');
+                    $('exo-text').textContent = d.llm_enabled ? 'offline' : 'regex-only';
                 }
-            })
-            .catch(() => {
-                statusDot.classList.add('error');
-                statusText.textContent = 'Cannot reach backend';
-            });
+            }).catch(() => { $('exo-dot').classList.add('off'); $('exo-text').textContent = 'offline'; });
 
-        // Drag and drop.
+            fetch('/api/pipeline/data').then(r => r.json()).then(d => {
+                const n = (d.memory_stats && d.memory_stats.total_entities) || 0;
+                $('cog-dot').classList.add('live');
+                $('cog-text').textContent = n + ' remembered';
+            }).catch(() => { $('cog-text').textContent = 'ready'; });
+        }
+        loadStatus();
+
+        // ---------- Upload ----------
         dropzone.addEventListener('click', () => fileInput.click());
-        dropzone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropzone.classList.add('dragover');
-        });
+        dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
         dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
-        dropzone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropzone.classList.remove('dragover');
-            const files = e.dataTransfer.files;
-            if (files.length) upload(files[0]);
+        dropzone.addEventListener('drop', e => {
+            e.preventDefault(); dropzone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) upload(e.dataTransfer.files[0]);
         });
-        fileInput.addEventListener('change', () => {
-            if (fileInput.files.length) upload(fileInput.files[0]);
-        });
+        fileInput.addEventListener('change', () => { if (fileInput.files.length) upload(fileInput.files[0]); });
+
+        function resetEngine() {
+            ['node-detect','node-remember','node-redact'].forEach(id => $(id).classList.remove('active','done'));
+            ['conn1','conn2'].forEach(id => $(id).classList.remove('flowing'));
+            ['meta-detect','meta-remember','meta-redact'].forEach(id => $(id).textContent = '');
+            $('short').classList.remove('show');
+        }
 
         function upload(file) {
-            progressCard.classList.add('active');
-            spansCard.classList.remove('active');
-            mappingCard.classList.remove('active');
-            errorCard.classList.remove('active');
-            downloadBtn.style.display = 'none';
-            downloadTextBtn.style.display = 'none';
-            updateProgress(0, 'Uploading...');
-            renderStages({});
-            renderStats({});
-
-            const form = new FormData();
-            form.append('file', file);
-
+            ['progress-card'].forEach(id => $(id).classList.add('active'));
+            ['spans-card','map-card','doc-card','timeline-card','error-card'].forEach(id => $(id).classList.remove('active'));
+            $('view-original').src = 'about:blank'; $('view-redacted').src = 'about:blank';
+            $('dl-btn').style.display = 'none'; $('dl-text-btn').style.display = 'none';
+            resetEngine();
+            setProgress(2, 'Uploading');
+            const form = new FormData(); form.append('file', file);
             fetch('/api/upload', { method: 'POST', body: form })
                 .then(r => r.json())
-                .then(data => {
-                    if (data.error) throw new Error(data.error);
-                    pollJob(data.job_id);
-                })
+                .then(d => { if (d.error) throw new Error(d.error); poll(d.job_id); })
                 .catch(err => showError(err.message));
         }
 
-        function pollJob(jobId) {
-            const interval = setInterval(() => {
-                fetch(`/api/job/${jobId}`)
-                    .then(r => r.json())
-                    .then(job => {
-                        updateProgress(job.progress, job.status);
-                        renderStages(job.stages || {});
-                        renderStats(job.stages || {});
-
-                        if (job.status === 'done') {
-                            clearInterval(interval);
-                            showSpans(job.spans);
-                            showMapping(job.mapping || []);
-                            downloadBtn.href = `/api/download/${jobId}`;
-                            downloadBtn.style.display = 'inline-flex';
-                            downloadTextBtn.href = `/api/download_text/${jobId}`;
-                            downloadTextBtn.style.display = 'inline-flex';
-                        } else if (job.status === 'error') {
-                            clearInterval(interval);
-                            showError(job.error || 'Processing failed');
-                        }
-                    })
-                    .catch(() => {
-                        clearInterval(interval);
-                        showError('Lost connection to backend');
-                    });
-            }, 500);
+        function poll(jobId) {
+            const iv = setInterval(() => {
+                fetch(`/api/job/${jobId}`).then(r => r.json()).then(job => {
+                    setProgress(job.progress, prettyStatus(job.status));
+                    driveEngine(job.progress, job.stages || {});
+                    renderStats(job.stages || {});
+                    if (job.status === 'done') {
+                        clearInterval(iv);
+                        finishEngine(job.stages || {});
+                        showDocument(job, jobId);
+                        showTimeline(job.stages || {});
+                        showSpans(job.spans || []);
+                        showMapping(job.mapping || []);
+                        $('dl-btn').href = `/api/download/${jobId}`; $('dl-btn').style.display = 'inline-flex';
+                        $('dl-text-btn').href = `/api/download_text/${jobId}`; $('dl-text-btn').style.display = 'inline-flex';
+                        loadStatus(); // refresh Cognee memory count in header
+                    } else if (job.status === 'error') {
+                        clearInterval(iv); showError(job.error || 'Processing failed');
+                    }
+                }).catch(() => { clearInterval(iv); showError('Lost connection to backend'); });
+            }, 400);
         }
 
-        function updateProgress(pct, status) {
-            progressFill.style.width = pct + '%';
-            progressStatus.textContent = status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-            progressPct.textContent = pct + '%';
+        function setProgress(pct, label) {
+            $('prog-fill').style.width = pct + '%';
+            $('prog-pct').textContent = pct + '%';
+            $('prog-status').innerHTML = '<b>' + label + '</b>';
+        }
+        function prettyStatus(s) {
+            return (s || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
         }
 
-        function renderStages(stages) {
-            stagesList.innerHTML = '';
-            STAGES.forEach(stage => {
-                const isActive = stage.key === stages._current_stage ||
-                    (stage.key === 'detecting_llm' && (stages.llm_spans !== undefined || stages.llm_error));
-                const isDone = stages[stage.key] !== undefined;
-                const div = document.createElement('div');
-                div.className = 'stage-item' + (isActive ? ' active' : '') + (isDone ? ' done' : '');
-                const detail = getStageDetail(stage.key, stages);
-                div.innerHTML = `
-                    <div class="stage-name">
-                        <span class="stage-icon">${isDone ? '✓' : stage.icon}</span>
-                        <span>${stage.label}</span>
-                    </div>
-                    <span class="stage-detail">${detail}</span>
-                `;
-                stagesList.appendChild(div);
+        // Animate the three-node engine from live progress + stages
+        function driveEngine(pct, st) {
+            const d = $('node-detect'), r = $('node-remember'), x = $('node-redact');
+            const c1 = $('conn1'), c2 = $('conn2');
+            // Detect (regex + EXO)
+            if (pct >= 5) d.classList.add('active');
+            if (pct >= 70) { d.classList.remove('active'); d.classList.add('done'); }
+            // Remember (Cognee) overlaps detect, persists late
+            if (pct >= 30) r.classList.add('active');
+            if (pct >= 90) { r.classList.remove('active'); r.classList.add('done'); }
+            // Redact
+            if (pct >= 70) x.classList.add('active');
+            if (pct >= 100) { x.classList.remove('active'); x.classList.add('done'); }
+            // wires flow while moving
+            c1.classList.toggle('flowing', pct >= 30 && pct < 90);
+            c2.classList.toggle('flowing', pct >= 65 && pct < 100);
+
+            // live node meta
+            if (st.regex_spans !== undefined || st.llm_spans !== undefined) {
+                const rx = st.regex_spans ?? 0, lm = st.llm_spans ?? 0;
+                $('meta-detect').innerHTML = `${rx} regex · <span style="color:var(--exo)">${lm} EXO</span>`;
+            }
+            if (st.memory_spans !== undefined || st.memory_entities !== undefined) {
+                const ms = st.memory_spans ?? 0, me = st.memory_after ?? st.memory_entities ?? 0;
+                $('meta-remember').innerHTML = `<span style="color:var(--cognee)">${ms} recalled</span> · ${me} in memory`;
+            }
+            if (st.replacements !== undefined) {
+                $('meta-redact').textContent = `${st.replacements} replaced`;
+            }
+        }
+
+        function finishEngine(st) {
+            $('node-detect').classList.add('done'); $('node-detect').classList.remove('active');
+            $('node-remember').classList.add('done'); $('node-remember').classList.remove('active');
+            $('node-redact').classList.add('done'); $('node-redact').classList.remove('active');
+            ['conn1','conn2'].forEach(id => $(id).classList.remove('flowing'));
+
+            const recalled = st.memory_spans ?? 0;
+            const exoNew = st.llm_spans ?? 0;
+            const learned = st.new_entities ?? 0;
+            const before = st.memory_entities ?? 0;
+            const after = st.memory_after ?? (before + learned);
+
+            let msg;
+            if (recalled > 0) {
+                msg = `<b>Cognee recognised ${recalled} entit${recalled===1?'y':'ies'}</b> from earlier documents — `
+                    + `<span class="exoref">EXO inference was skipped</span> for those. `
+                    + (learned > 0
+                        ? `${learned} new entit${learned===1?'y':'ies'} detected and saved (memory ${before} → ${after}).`
+                        : `Nothing new to learn — memory holds at ${after}.`);
+            } else if (exoNew > 0) {
+                msg = `<span class="exoref">EXO detected ${exoNew} contextual entit${exoNew===1?'y':'ies'}.</span> `
+                    + `<b>Cognee saved ${learned} to memory</b> (${before} → ${after}) — `
+                    + `next time this person appears, EXO is skipped entirely.`;
+            } else {
+                msg = `Structured PII caught by regex. <b>Cognee memory holds ${after} entities</b>, each with one consistent pseudonym across every document.`;
+            }
+            $('short-text').innerHTML = msg;
+            $('short').classList.add('show');
+        }
+
+        function renderStats(st) {
+            const grid = $('stats'); grid.innerHTML = '';
+            const add = (cls, v, l) => {
+                const e = document.createElement('div'); e.className = 'stat ' + cls;
+                e.innerHTML = `<div class="v">${v}</div><div class="l">${l}</div>`; grid.appendChild(e);
+            };
+            // Sources sum to the total: PII found = Regex + Recalled + EXO
+            if (st.total_spans !== undefined) add('acc', st.total_spans, 'PII found');
+            if (st.regex_spans !== undefined) add('rgx', st.regex_spans, 'Regex');
+            if (st.memory_spans !== undefined) add('cog', st.memory_spans, 'Recalled');
+            if (st.llm_spans !== undefined) add('exo', st.llm_spans, 'EXO detections');
+            if (st.new_entities !== undefined) add('cog', st.new_entities, 'New entities');
+            if (st.replacements !== undefined) add('acc', st.replacements, 'Redactions');
+        }
+
+        function fmtNum(n) { return (n == null) ? '–' : Number(n).toLocaleString(); }
+        function fmtMs(ms) { if (ms == null) return ''; return ms >= 1000 ? (ms / 1000).toFixed(ms >= 10000 ? 0 : 1) + 's' : ms + 'ms'; }
+
+        function showTimeline(st) {
+            const exo = st.llm_spans ?? 0, ent = st.entities ?? 0, newE = st.new_entities ?? 0;
+            const ms = st.memory_spans ?? 0;
+            const ing = st.ingestion || {};
+            const tm = st.timings || {};
+            const steps = [
+                ['📄', 'Ingestion',
+                    `Parsed ${ing.pages ?? '–'} page(s), ${ing.chunks ?? '–'} chunks, ${ing.images ?? 0} embedded image(s) · ${fmtNum(st.text_length)} chars`, 'ingest'],
+                ['🔍', 'Regex detection',
+                    `${st.regex_spans ?? 0} structured PII matched — email, phone, NI, IBAN, card, DOB, postcode`, 'regex'],
+                ['🕸️', 'Cognee memory check',
+                    `${ms} entit${ms === 1 ? 'y' : 'ies'} recalled from ${st.memory_entities ?? 0} in the graph — known entities skip the LLM`, 'memory'],
+                ['🧠', 'EXO detection',
+                    st.llm_chunks ? `Ran on ${st.llm_chunks} chunk(s) → ${exo} new contextual entit${exo === 1 ? 'y' : 'ies'}`
+                                  : 'Skipped — memory already covered this document', 'detect'],
+                ['🧩', 'Entity resolution + pseudonyms',
+                    `${ent} canonical entit${ent === 1 ? 'y' : 'ies'} → one stable pseudonym each, consistent across every document`, null],
+                ['⬛', 'True redaction',
+                    `${st.replacements ?? 0} replacement(s) — text permanently deleted from the file, not just covered`, 'redact'],
+            ];
+            if (st.image_count) steps.push(['🖼️', 'Image redaction',
+                    `${st.image_regions ?? 0} region(s) blurred across ${st.image_count} image(s) — faces, IDs, signatures`, 'images']);
+            steps.push(['💾', 'Cognee memory persist',
+                newE > 0 ? `${newE} new entit${newE === 1 ? 'y' : 'ies'} saved — the graph now holds ${st.memory_after ?? '–'}`
+                         : `No new entities — the graph holds at ${st.memory_after ?? '–'}`, 'persist']);
+            const cg = st.cognee_memory;
+            steps.push(['📊', 'Cognee knowledge graph',
+                cg === 'ok' ? 'Entity–document relationship graph updated'
+                            : (cg ? cg : 'Deterministic JSON memory store'), 'graph']);
+
+            $('timeline').innerHTML = steps.map(([ic, t, d, key]) => {
+                const badge = (key && tm[key] != null) ? `<span class="tl-time">${fmtMs(tm[key])}</span>` : '';
+                return `
+                <div class="tl-step">
+                    <div class="tl-dot">${ic}</div>
+                    <div class="tl-title"><span>${esc(t)}</span>${badge}</div>
+                    <div class="tl-detail">${esc(d)}</div>
+                </div>`;
+            }).join('');
+            const total = tm.total;
+            const cnt = $('timeline-card').querySelector('.count');
+            if (cnt) cnt.textContent = (total != null)
+                ? `— full on-device process · ${fmtMs(total)} total`
+                : '— the full on-device process, start to finish';
+            $('timeline-card').classList.add('active');
+        }
+
+        function showDocument(job, jobId) {
+            const isPdf = (job.filename || '').toLowerCase().endsWith('.pdf');
+            const card = $('doc-card'), grid = $('doc-grid'), textEl = $('doc-text');
+            if (isPdf) {
+                grid.style.display = 'grid'; textEl.style.display = 'none';
+                card.classList.add('wide');
+                $('view-original').src = `/api/view/original/${jobId}#toolbar=0&view=FitH`;
+                $('view-redacted').src = `/api/view/redacted/${jobId}#toolbar=0&view=FitH`;
+            } else {
+                grid.style.display = 'none'; card.classList.remove('wide');
+                textEl.style.display = 'block';
+                textEl.innerHTML = highlightPseudonyms(job.redacted_text || '(no text output)', job.mapping || []);
+            }
+            card.classList.add('active');
+        }
+
+        function highlightPseudonyms(text, mapping) {
+            let html = esc(text);
+            const pseudos = [...new Set((mapping || []).map(m => m.pseudonym).filter(Boolean))]
+                .sort((a, b) => b.length - a.length);
+            pseudos.forEach(p => {
+                const re = new RegExp(escapeRegex(esc(p)), 'g');
+                html = html.replace(re, m => `<mark>${m}</mark>`);
             });
+            return html;
         }
-
-        function getStageDetail(key, stages) {
-            if (key === 'ingesting') {
-                if (stages.pages !== undefined) {
-                    return `${stages.pages} pages, ${stages.chunks} chunks`;
-                }
-                return 'Parsing document...';
-            }
-            if (key === 'detecting_regex') {
-                if (stages.regex_spans !== undefined) {
-                    return `${stages.regex_spans} matches`;
-                }
-                return 'Pattern matching...';
-            }
-            if (key === 'checking_memory') {
-                if (stages.memory_entities !== undefined) {
-                    const known = stages.known_spans !== undefined ? `, ${stages.known_spans} from memory` : '';
-                    const new_ents = stages.new_entities !== undefined ? `, ${stages.new_entities} new` : '';
-                    return `${stages.memory_entities} entities in memory${known}${new_ents}`;
-                }
-                return 'Checking entity memory...';
-            }
-            if (key === 'detecting_llm') {
-                if (stages.llm_error) return 'LLM unavailable, skipped';
-                if (stages.llm_spans !== undefined) {
-                    return `${stages.llm_spans} matches`;
-                }
-                if (stages.llm_skipped) return 'Skipped';
-                return 'EXO inference...';
-            }
-            if (key === 'redacting_text') {
-                if (stages.replacements !== undefined) {
-                    return `${stages.replacements} replacements, ${stages.entities} entities`;
-                }
-                return 'Cognee pseudonymization...';
-            }
-            if (key === 'redacting_pdf') {
-                if (stages.pdf_output) return 'Done';
-                return 'Applying true redactions...';
-            }
-            if (key === 'building_memory') {
-                if (stages.cognee_memory === 'ok') return 'Graph built';
-                if (stages.cognee_memory) return 'Skipped';
-                return 'Building entity graph...';
-            }
-            return '';
-        }
-
-        function renderStats(stages) {
-            statsGrid.innerHTML = '';
-            if (stages.total_spans !== undefined) {
-                addStat('PII Spans', stages.total_spans);
-            }
-            if (stages.regex_spans !== undefined) {
-                addStat('Regex Matches', stages.regex_spans);
-            }
-            if (stages.llm_spans !== undefined) {
-                addStat('LLM Matches', stages.llm_spans);
-            }
-            if (stages.entities !== undefined) {
-                addStat('Entities', stages.entities);
-            }
-            if (stages.replacements !== undefined) {
-                addStat('Replacements', stages.replacements);
-            }
-            if (stages.memory_entities !== undefined) {
-                addStat('Memory Entities', stages.memory_entities);
-            }
-            if (stages.new_entities !== undefined) {
-                addStat('New Entities', stages.new_entities);
-            }
-            if (stages.chunks !== undefined) {
-                addStat('Chunks', stages.chunks);
-            }
-        }
-
-        function addStat(label, value) {
-            const div = document.createElement('div');
-            div.className = 'stat-box';
-            div.innerHTML = `
-                <div class="stat-value">${value}</div>
-                <div class="stat-label">${label}</div>
-            `;
-            statsGrid.appendChild(div);
-        }
+        function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
         function showSpans(spans) {
-            spanList.innerHTML = '';
-            spanCount.textContent = spans.length;
-            spans.forEach(s => {
-                const div = document.createElement('div');
-                div.className = 'span-item';
-                div.innerHTML = `
-                    <span class="span-text">${escapeHtml(s.text)}</span>
-                    <span class="span-type ${s.source}">${s.type} · ${s.source}</span>
-                `;
-                spanList.appendChild(div);
+            const list = $('span-list'); list.innerHTML = '';
+            $('span-count').textContent = `(${spans.length})`;
+            // sort: memory first (the cross-doc wins), then llm, then regex
+            const order = { memory: 0, llm: 1, regex: 2 };
+            spans.slice().sort((a,b) => (order[a.source]??9) - (order[b.source]??9)).forEach(s => {
+                const e = document.createElement('div'); e.className = 'span';
+                e.innerHTML = `<span class="txt">${esc(s.text)}</span>`
+                    + `<span class="tag ${s.source}">${s.type} · ${s.source}</span>`;
+                list.appendChild(e);
             });
-            spansCard.classList.add('active');
+            $('spans-card').classList.add('active');
         }
 
         function showMapping(mapping) {
-            if (!mapping || mapping.length === 0) {
-                mappingCard.classList.remove('active');
-                return;
-            }
-            mappingList.innerHTML = '';
-            mapping.forEach(m => {
-                const div = document.createElement('div');
-                div.className = 'mapping-item';
-                const aliases = (m.aliases || []).join(', ');
-                div.innerHTML = `
-                    <div class="mapping-info">
-                        <div class="mapping-type">${m.type}</div>
-                        <div class="mapping-aliases">${escapeHtml(aliases)}</div>
-                    </div>
-                    <span class="mapping-pseudonym">${escapeHtml(m.pseudonym)}</span>
-                `;
-                mappingList.appendChild(div);
+            if (!mapping || !mapping.length) { $('map-card').classList.remove('active'); return; }
+            const list = $('map-list'); list.innerHTML = '';
+            // entities with multiple aliases (cross-form) first — they're the consistency story
+            mapping.slice().sort((a,b) => (b.aliases||[]).length - (a.aliases||[]).length).forEach(m => {
+                const aliases = (m.aliases || []);
+                const multi = aliases.length > 1 ? ' multi' : '';
+                const e = document.createElement('div'); e.className = 'map';
+                e.innerHTML = `<div class="info">`
+                    + `<span class="mtype">${m.type}</span>`
+                    + `<span class="aliases${multi}">${esc(aliases.join('  ·  '))}</span>`
+                    + `</div><span class="pseudo">${esc(m.pseudonym)}</span>`;
+                list.appendChild(e);
             });
-            mappingCard.classList.add('active');
+            $('map-card').classList.add('active');
         }
 
         function showError(msg) {
-            errorText.textContent = msg;
-            errorCard.classList.add('active');
+            $('error-text').textContent = msg; $('error-card').classList.add('active');
         }
-
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
+        function esc(t) { const d = document.createElement('div'); d.textContent = t == null ? '' : t; return d.innerHTML; }
     </script>
 </body>
 </html>

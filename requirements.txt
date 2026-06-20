@@ -10,6 +10,11 @@ python-docx>=1.1.0
 PyMuPDF>=1.24.0          # fitz — PDF text extraction + true redaction
 requests>=2.31.0         # EXO / Ollama HTTP client
 
+# ── Image PII (Person B — faces / ID cards / signatures) ──
+opencv-python-headless>=4.9.0   # cv2 — face/ID/signature detection + blur redaction
+# Optional OCR for text-in-image PII (needs Tesseract binary: brew install tesseract):
+# pytesseract>=0.3.10
+
 # ── Web UI ──
 flask>=3.0.0             # Local web interface for hackathon demo
 

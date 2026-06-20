@@ -100,6 +100,35 @@ def _span_to_dict(span: PIISpan) -> dict:
     }
 
 
+# Source priority when two spans cover the same text region. Memory wins so a
+# re-seen entity reads as "recalled by Cognee" (not re-counted as regex/LLM).
+_SOURCE_PRIORITY = {"memory": 3, "regex": 2, "llm": 1}
+
+
+def _dedup_by_region(spans: List[PIISpan]) -> List[PIISpan]:
+    """Collapse spans covering the same text region into one.
+
+    Regex and memory (and occasionally the LLM) can each emit a span for the
+    same occurrence — e.g. an email is both a regex hit and, on a re-run, a
+    memory hit. Keeping both double-counts the PII and shows duplicates in the
+    UI. We keep the highest-priority span per region so the per-source tiles
+    sum exactly to the total.
+    """
+    ordered = sorted(
+        spans,
+        key=lambda s: (s.char_start, -(s.char_end - s.char_start),
+                       -_SOURCE_PRIORITY.get(s.source, 0)),
+    )
+    kept: List[PIISpan] = []
+    max_end = -1
+    for s in ordered:
+        if s.char_start < max_end:  # overlaps a span we already kept
+            continue
+        kept.append(s)
+        max_end = max(max_end, s.char_end)
+    return kept
+
+
 def _set_job_status(job: dict, status: str, progress: int, **extra: Any) -> None:
     job["status"] = status
     job["progress"] = progress
@@ -186,6 +215,7 @@ def api_upload():
         "output_path": None,
         "redacted_text": None,
         "mapping": [],
+        "images": [],
         "error": None,
         "stages": {},
     }
@@ -211,6 +241,7 @@ def api_job(job_id: str):
         "filename": job["filename"],
         "spans": [_span_to_dict(s) for s in job["spans"]],
         "mapping": job.get("mapping", []),
+        "images": job.get("images", []),
         "output_path": job["output_path"],
         "redacted_text": job.get("redacted_text"),
         "stages": job.get("stages", {}),
@@ -229,6 +260,39 @@ def api_download(job_id: str):
         as_attachment=True,
         download_name=f"{job['filename']}_redacted{Path(job['output_path']).suffix}",
     )
+
+
+@app.route("/api/view/<which>/<job_id>")
+def api_view(which: str, job_id: str):
+    """Serve the original or redacted file *inline* for the on-page viewer."""
+    job = _jobs.get(job_id)
+    if not job:
+        abort(404)
+    if which == "original":
+        path = job.get("upload_path")
+    elif which == "redacted":
+        path = job.get("output_path")
+    else:
+        abort(404)
+    if not path or not Path(path).exists():
+        abort(404)
+    # as_attachment=False → browser renders it (PDF viewer / text) in the iframe.
+    return send_file(path, as_attachment=False)
+
+
+@app.route("/api/image/<job_id>/<kind>/<int:idx>")
+def api_image(job_id: str, kind: str, idx: int):
+    """Serve an extracted image: kind = 'original' | 'redacted'."""
+    job = _jobs.get(job_id)
+    if not job:
+        abort(404)
+    images = job.get("images", [])
+    if idx < 0 or idx >= len(images):
+        abort(404)
+    path = images[idx].get(kind if kind in ("original", "redacted") else "redacted")
+    if not path or not Path(path).exists():
+        abort(404)
+    return send_file(path, as_attachment=False)
 
 
 @app.route("/api/download_text/<job_id>")
@@ -266,6 +330,16 @@ def _process_job(job_id: str) -> None:
     doc_id = job_id
     stages: dict = {}
 
+    # Per-stage wall-clock timing (ms). Stored under stages["timings"].
+    timings: dict = {}
+    stages["timings"] = timings
+    _t_last = [time.perf_counter()]
+
+    def _mark(name: str) -> None:
+        now = time.perf_counter()
+        timings[name] = round((now - _t_last[0]) * 1000)
+        _t_last[0] = now
+
     try:
         # ------------------------------------------------------------------
         # 1. INGESTION
@@ -290,6 +364,7 @@ def _process_job(job_id: str) -> None:
             "images": len(document.images),
             "has_geometry": len(document.pages) > 0 and document.pages[0].width > 0,
         }
+        _mark("ingest")
         _set_job_status(job, "ingesting", 20, stages=stages)
 
         # ------------------------------------------------------------------
@@ -301,6 +376,7 @@ def _process_job(job_id: str) -> None:
         _set_job_status(job, "detecting_regex", 30, stages=stages)
         regex_spans = detect_regex(full_text, doc_id)
         stages["regex_spans"] = len(regex_spans)
+        _mark("regex")
 
         # ------------------------------------------------------------------
         # 3. MEMORY-FIRST: Find known entities in text + check memory
@@ -311,6 +387,7 @@ def _process_job(job_id: str) -> None:
         from cognee_mem.memory_store import find_known_spans_in_text
         memory_spans = find_known_spans_in_text(full_text, doc_id)
         stages["memory_spans"] = len(memory_spans)
+        _mark("memory")
         
         # Merge all spans before running the pipeline
         all_spans = list({s.span_id: s for s in (regex_spans + memory_spans)}.values())
@@ -333,20 +410,41 @@ def _process_job(job_id: str) -> None:
         stages["memory_after"] = get_memory_stats()["total_entities"]
         stages["new_entities"] = stages["memory_after"] - stages["memory_entities"]
         stages["llm_spans"] = len(pipeline_out.llm_spans)
-        
+        _mark("detect")
+
         # Persist new entities to memory for future runs
         add_to_memory(pipeline_out.mapping)
         stages["memory_after"] = get_memory_stats()["total_entities"]
         stages["new_entities"] = stages["memory_after"] - stages["memory_entities"]
+        _mark("persist")
         
         all_spans = list({s.span_id: s for s in (regex_spans + memory_spans + pipeline_out.llm_spans)}.values())
+        # Collapse overlapping regions (memory > regex > llm) so counts don't
+        # double-count an entity found by more than one source.
+        all_spans = _dedup_by_region(all_spans)
         job["spans"] = all_spans
+        # Recompute per-source counts from the deduped set: regex + recalled +
+        # EXO now sum exactly to total PII found.
+        _by_source = {"regex": 0, "memory": 0, "llm": 0}
+        for _s in all_spans:
+            _by_source[_s.source] = _by_source.get(_s.source, 0) + 1
         stages["total_spans"] = len(all_spans)
-        stages["regex_spans"] = len(regex_spans)
+        stages["regex_spans"] = _by_source["regex"]
+        stages["memory_spans"] = _by_source["memory"]
+        stages["llm_spans"] = _by_source["llm"]
         
         redacted_text = pipeline_out.redacted_texts.get(doc_id, full_text)
         job["redacted_text"] = redacted_text
-        job["mapping"] = _mapping_to_dict(pipeline_out.mapping)
+        # Scope the entity map to entities that actually appear in THIS document.
+        # Memory holds every entity ever seen; the panel should show only this
+        # doc's — so cross-document consistency (same entity → same pseudonym in
+        # another doc) is obvious instead of buried in the full memory dump.
+        _present = {s.text for s in all_spans}
+        job["mapping"] = [
+            m for m in _mapping_to_dict(pipeline_out.mapping)
+            if (set(m["aliases"]) & _present)
+            or any(a in full_text for a in m["aliases"])
+        ]
         stages["replacements"] = sum(r.replacements for r in pipeline_out.results)
         stages["entities"] = len(pipeline_out.mapping.entities)
 
@@ -395,6 +493,83 @@ def _process_job(job_id: str) -> None:
                 "redacted_path": redacted_path,
             }, f, indent=2)
         stages["pseudonym_path"] = pseudonym_path
+        _mark("redact")
+
+        # ------------------------------------------------------------------
+        # 6b. IMAGE PII (faces / IDs / signatures) — additive, fully guarded.
+        #     Any failure here must NOT affect the text redaction above.
+        # ------------------------------------------------------------------
+        try:
+            if document.images:
+                _set_job_status(job, "redacting_images", 82, stages=stages)
+                from image_vision.detector import detect_image_pii
+                from image_vision.redaction import redact_image
+
+                img_out_dir = Path(extracted_dir) / "redacted"
+                img_out_dir.mkdir(parents=True, exist_ok=True)
+                total_regions = 0
+                composites = []  # (page_no, bbox, redacted_png) to burn into the PDF
+                for idx, ref in enumerate(document.images):
+                    if not ref.path or not Path(ref.path).exists():
+                        continue
+                    regions = detect_image_pii(
+                        ref.path, doc_id=doc_id,
+                        image_id=ref.image_id, page_no=ref.page_no or 0,
+                    )
+                    # Signatures (wide, short images) detect poorly region-by-
+                    # region — blur the whole image so the strokes are covered.
+                    try:
+                        import cv2
+                        from schema import ImageRegion
+                        _im = cv2.imread(ref.path)
+                        if _im is not None:
+                            _h, _w = _im.shape[:2]
+                            if _w / max(_h, 1) >= 2.2:
+                                regions = [ImageRegion(
+                                    region_id=f"{ref.image_id}-full", doc_id=doc_id,
+                                    image_id=ref.image_id, page_no=ref.page_no or 0,
+                                    bbox=(0, 0, _w, _h), label="SIGNATURE",
+                                    confidence=1.0, source="cv",
+                                )]
+                    except Exception:
+                        pass
+                    out_p = str(img_out_dir / f"{ref.image_id}_redacted.png")
+                    redact_image(ref.path, regions, out_p)
+                    total_regions += len(regions)
+                    job["images"].append({
+                        "idx": idx,
+                        "image_id": ref.image_id,
+                        "original": ref.path,
+                        "redacted": out_p,
+                        "regions": len(regions),
+                        "page_no": ref.page_no,
+                    })
+                    if ref.bbox and ref.page_no:
+                        composites.append((ref.page_no, ref.bbox, out_p))
+                stages["image_count"] = len(job["images"])
+                stages["image_regions"] = total_regions
+
+                # Burn the blurred images back into the redacted PDF so the
+                # output file itself contains no unredacted faces / IDs.
+                if is_pdf and composites and job["output_path"] and Path(job["output_path"]).exists():
+                    try:
+                        import fitz
+                        pdf = fitz.open(job["output_path"])
+                        for page_no, bbox, rp in composites:
+                            if 1 <= page_no <= pdf.page_count:
+                                pdf[page_no - 1].insert_image(
+                                    fitz.Rect(*bbox), filename=rp,
+                                    overlay=True, keep_proportion=False,
+                                )
+                        pdf.save(job["output_path"], incremental=True,
+                                 encryption=fitz.PDF_ENCRYPT_KEEP)
+                        pdf.close()
+                        stages["image_composited"] = len(composites)
+                    except Exception as exc2:
+                        stages["image_composite_error"] = str(exc2)
+        except Exception as exc:  # never break the demo over an image
+            stages["image_error"] = str(exc)
+        _mark("images")
 
         # ------------------------------------------------------------------
         # 7. COGNEE MEMORY GRAPH (optional, real cognee package)
@@ -409,7 +584,9 @@ def _process_job(job_id: str) -> None:
                 stages["cognee_memory"] = f"skipped: {str(exc)}"
         else:
             stages["cognee_memory"] = "disabled (using JSON memory)"
+        _mark("graph")
 
+        timings["total"] = sum(v for k, v in timings.items() if k != "total")
         _set_job_status(job, "done", 100, stages=stages)
 
     except Exception as exc:

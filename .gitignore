@@ -226,3 +226,6 @@ __marimo__/
 # Redaction pipeline test outputs (generated from the dataset, not source)
 *_redacted_*.pdf
 dataset/output/
+
+# Local memory backups (transient working files)
+cognee_mem/entity_memory.backup.json

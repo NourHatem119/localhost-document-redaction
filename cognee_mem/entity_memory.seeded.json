@@ -1,0 +1,660 @@
+{
+  "entities": {
+    "ADDRESS-0000": {
+      "canonical_id": "ADDRESS-0000",
+      "type": "ADDRESS",
+      "canonical_text": "5 Elmwood Court, Birmingham, B15 3DH",
+      "aliases": [
+        "5 Elmwood Court, Birmingham, B15 3DH"
+      ],
+      "doc_ids": [
+        "doc_0004",
+        "doc_0008",
+        "doc_0001"
+      ],
+      "pseudonym": "[ADDRESS-1]"
+    },
+    "ADDRESS-0001": {
+      "canonical_id": "ADDRESS-0001",
+      "type": "ADDRESS",
+      "canonical_text": "14 Carlisle Road, Manchester, M20 4PL",
+      "aliases": [
+        "14 Carlisle Road, Manchester, M20 4PL"
+      ],
+      "doc_ids": [
+        "doc_0007",
+        "doc_0002"
+      ],
+      "pseudonym": "[ADDRESS-2]"
+    },
+    "ADDRESS-0002": {
+      "canonical_id": "ADDRESS-0002",
+      "type": "ADDRESS",
+      "canonical_text": "27 Kingsway, Leeds, LS1 2HQ",
+      "aliases": [
+        "27 Kingsway, Leeds, LS1 2HQ"
+      ],
+      "doc_ids": [
+        "doc_0003"
+      ],
+      "pseudonym": "[ADDRESS-3]"
+    },
+    "ADDRESS-0003": {
+      "canonical_id": "ADDRESS-0003",
+      "type": "ADDRESS",
+      "canonical_text": "92 Harbour View, Liverpool, L3 4BG",
+      "aliases": [
+        "92 Harbour View, Liverpool, L3 4BG"
+      ],
+      "doc_ids": [
+        "doc_0005"
+      ],
+      "pseudonym": "[ADDRESS-4]"
+    },
+    "ADDRESS-0004": {
+      "canonical_id": "ADDRESS-0004",
+      "type": "ADDRESS",
+      "canonical_text": "8 Foundry Lane, Bristol, BS1 6RT",
+      "aliases": [
+        "8 Foundry Lane, Bristol, BS1 6RT"
+      ],
+      "doc_ids": [
+        "doc_0006"
+      ],
+      "pseudonym": "[ADDRESS-5]"
+    },
+    "CREDIT_CARD-0000": {
+      "canonical_id": "CREDIT_CARD-0000",
+      "type": "CREDIT_CARD",
+      "canonical_text": "6011527601895556",
+      "aliases": [
+        "6011527601895556"
+      ],
+      "doc_ids": [
+        "doc_0003"
+      ],
+      "pseudonym": "[CARD-1]"
+    },
+    "CREDIT_CARD-0001": {
+      "canonical_id": "CREDIT_CARD-0001",
+      "type": "CREDIT_CARD",
+      "canonical_text": "4330792440268592",
+      "aliases": [
+        "4330792440268592"
+      ],
+      "doc_ids": [
+        "doc_0005"
+      ],
+      "pseudonym": "[CARD-2]"
+    },
+    "CREDIT_CARD-0002": {
+      "canonical_id": "CREDIT_CARD-0002",
+      "type": "CREDIT_CARD",
+      "canonical_text": "30529170342366",
+      "aliases": [
+        "30529170342366"
+      ],
+      "doc_ids": [
+        "doc_0008"
+      ],
+      "pseudonym": "[CARD-3]"
+    },
+    "DOB-0000": {
+      "canonical_id": "DOB-0000",
+      "type": "DOB",
+      "canonical_text": "1987-09-15",
+      "aliases": [
+        "1987-09-15"
+      ],
+      "doc_ids": [
+        "doc_0004",
+        "doc_0001"
+      ],
+      "pseudonym": "[DOB-1]"
+    },
+    "DOB-0001": {
+      "canonical_id": "DOB-0001",
+      "type": "DOB",
+      "canonical_text": "1984-03-12",
+      "aliases": [
+        "1984-03-12"
+      ],
+      "doc_ids": [
+        "doc_0002"
+      ],
+      "pseudonym": "[DOB-2]"
+    },
+    "DOB-0002": {
+      "canonical_id": "DOB-0002",
+      "type": "DOB",
+      "canonical_text": "1978-06-04",
+      "aliases": [
+        "1978-06-04"
+      ],
+      "doc_ids": [
+        "doc_0003"
+      ],
+      "pseudonym": "[DOB-3]"
+    },
+    "DOB-0003": {
+      "canonical_id": "DOB-0003",
+      "type": "DOB",
+      "canonical_text": "1990-11-27",
+      "aliases": [
+        "1990-11-27"
+      ],
+      "doc_ids": [
+        "doc_0006"
+      ],
+      "pseudonym": "[DOB-4]"
+    },
+    "EMAIL-0000": {
+      "canonical_id": "EMAIL-0000",
+      "type": "EMAIL",
+      "canonical_text": "priya.patel@meridian-health.co.uk",
+      "aliases": [
+        "priya.patel@meridian-health.co.uk"
+      ],
+      "doc_ids": [
+        "doc_0004",
+        "doc_0008",
+        "doc_0001"
+      ],
+      "pseudonym": "[EMAIL-1]"
+    },
+    "EMAIL-0001": {
+      "canonical_id": "EMAIL-0001",
+      "type": "EMAIL",
+      "canonical_text": "john.smith@meridian-health.co.uk",
+      "aliases": [
+        "john.smith@meridian-health.co.uk"
+      ],
+      "doc_ids": [
+        "doc_0007",
+        "doc_0002"
+      ],
+      "pseudonym": "[EMAIL-2]"
+    },
+    "EMAIL-0002": {
+      "canonical_id": "EMAIL-0002",
+      "type": "EMAIL",
+      "canonical_text": "daniel.walsh@northgate-finance.com",
+      "aliases": [
+        "daniel.walsh@northgate-finance.com"
+      ],
+      "doc_ids": [
+        "doc_0003"
+      ],
+      "pseudonym": "[EMAIL-3]"
+    },
+    "EMAIL-0003": {
+      "canonical_id": "EMAIL-0003",
+      "type": "EMAIL",
+      "canonical_text": "stefan.novak@northgate-finance.com",
+      "aliases": [
+        "stefan.novak@northgate-finance.com"
+      ],
+      "doc_ids": [
+        "doc_0005"
+      ],
+      "pseudonym": "[EMAIL-4]"
+    },
+    "EMAIL-0004": {
+      "canonical_id": "EMAIL-0004",
+      "type": "EMAIL",
+      "canonical_text": "a.okafor@brightside-legal.co.uk",
+      "aliases": [
+        "a.okafor@brightside-legal.co.uk"
+      ],
+      "doc_ids": [
+        "doc_0006"
+      ],
+      "pseudonym": "[EMAIL-5]"
+    },
+    "IBAN-0000": {
+      "canonical_id": "IBAN-0000",
+      "type": "IBAN",
+      "canonical_text": "GB07OLJH23194875749118",
+      "aliases": [
+        "GB07OLJH23194875749118"
+      ],
+      "doc_ids": [
+        "doc_0003"
+      ],
+      "pseudonym": "[IBAN-1]"
+    },
+    "IBAN-0001": {
+      "canonical_id": "IBAN-0001",
+      "type": "IBAN",
+      "canonical_text": "GB22MPCF76842684656321",
+      "aliases": [
+        "GB22MPCF76842684656321"
+      ],
+      "doc_ids": [
+        "doc_0005"
+      ],
+      "pseudonym": "[IBAN-2]"
+    },
+    "IBAN-0002": {
+      "canonical_id": "IBAN-0002",
+      "type": "IBAN",
+      "canonical_text": "GB17KEMU01815908301661",
+      "aliases": [
+        "GB17KEMU01815908301661"
+      ],
+      "doc_ids": [
+        "doc_0007"
+      ],
+      "pseudonym": "[IBAN-3]"
+    },
+    "IBAN-0003": {
+      "canonical_id": "IBAN-0003",
+      "type": "IBAN",
+      "canonical_text": "GB73TPSZ71147104974650",
+      "aliases": [
+        "GB73TPSZ71147104974650"
+      ],
+      "doc_ids": [
+        "doc_0008"
+      ],
+      "pseudonym": "[IBAN-4]"
+    },
+    "MEDICAL-0000": {
+      "canonical_id": "MEDICAL-0000",
+      "type": "MEDICAL",
+      "canonical_text": "Penicillin allergy; asthma, salbutamol inhaler PRN",
+      "aliases": [
+        "Penicillin allergy; asthma, salbutamol inhaler PRN"
+      ],
+      "doc_ids": [
+        "doc_0004"
+      ],
+      "pseudonym": "[MEDICAL-1]"
+    },
+    "MEDICAL-0001": {
+      "canonical_id": "MEDICAL-0001",
+      "type": "MEDICAL",
+      "canonical_text": "intermittent shortness of breath on exertion",
+      "aliases": [
+        "intermittent shortness of breath on exertion"
+      ],
+      "doc_ids": [
+        "doc_0004"
+      ],
+      "pseudonym": "[MEDICAL-2]"
+    },
+    "MEDICAL-0002": {
+      "canonical_id": "MEDICAL-0002",
+      "type": "MEDICAL",
+      "canonical_text": "salbutamol inhaler as required",
+      "aliases": [
+        "salbutamol inhaler as required"
+      ],
+      "doc_ids": [
+        "doc_0004"
+      ],
+      "pseudonym": "[MEDICAL-3]"
+    },
+    "MEDICAL-0003": {
+      "canonical_id": "MEDICAL-0003",
+      "type": "MEDICAL",
+      "canonical_text": "oral corticosteroids",
+      "aliases": [
+        "oral corticosteroids"
+      ],
+      "doc_ids": [
+        "doc_0004"
+      ],
+      "pseudonym": "[MEDICAL-4]"
+    },
+    "NI_NUMBER-0000": {
+      "canonical_id": "NI_NUMBER-0000",
+      "type": "NI_NUMBER",
+      "canonical_text": "WK112233C",
+      "aliases": [
+        "WK112233C"
+      ],
+      "doc_ids": [
+        "doc_0004",
+        "doc_0008",
+        "doc_0001"
+      ],
+      "pseudonym": "[NI-1]"
+    },
+    "NI_NUMBER-0001": {
+      "canonical_id": "NI_NUMBER-0001",
+      "type": "NI_NUMBER",
+      "canonical_text": "QQ123456C",
+      "aliases": [
+        "QQ123456C"
+      ],
+      "doc_ids": [
+        "doc_0002"
+      ],
+      "pseudonym": "[NI-2]"
+    },
+    "NI_NUMBER-0002": {
+      "canonical_id": "NI_NUMBER-0002",
+      "type": "NI_NUMBER",
+      "canonical_text": "PR445566A",
+      "aliases": [
+        "PR445566A"
+      ],
+      "doc_ids": [
+        "doc_0005"
+      ],
+      "pseudonym": "[NI-3]"
+    },
+    "NI_NUMBER-0003": {
+      "canonical_id": "NI_NUMBER-0003",
+      "type": "NI_NUMBER",
+      "canonical_text": "AB654321A",
+      "aliases": [
+        "AB654321A"
+      ],
+      "doc_ids": [
+        "doc_0006"
+      ],
+      "pseudonym": "[NI-4]"
+    },
+    "ORG-0000": {
+      "canonical_id": "ORG-0000",
+      "type": "ORG",
+      "canonical_text": "Meridian Health NHS Trust",
+      "aliases": [
+        "Meridian Health NHS Trust"
+      ],
+      "doc_ids": [
+        "doc_0004",
+        "doc_0008",
+        "doc_0002",
+        "doc_0001"
+      ],
+      "pseudonym": "Organization 1"
+    },
+    "ORG-0001": {
+      "canonical_id": "ORG-0001",
+      "type": "ORG",
+      "canonical_text": "Northgate Finance Ltd",
+      "aliases": [
+        "Northgate Finance Ltd"
+      ],
+      "doc_ids": [
+        "doc_0003",
+        "doc_0005"
+      ],
+      "pseudonym": "Organization 2"
+    },
+    "ORG-0002": {
+      "canonical_id": "ORG-0002",
+      "type": "ORG",
+      "canonical_text": "Brightside Legal LLP",
+      "aliases": [
+        "Brightside Legal LLP"
+      ],
+      "doc_ids": [
+        "doc_0006"
+      ],
+      "pseudonym": "Organization 3"
+    },
+    "ORG-0003": {
+      "canonical_id": "ORG-0003",
+      "type": "ORG",
+      "canonical_text": "Northern Energy plc",
+      "aliases": [
+        "Northern Energy plc"
+      ],
+      "doc_ids": [
+        "doc_0007"
+      ],
+      "pseudonym": "Organization 4"
+    },
+    "OTHER-0000": {
+      "canonical_id": "OTHER-0000",
+      "type": "OTHER",
+      "canonical_text": "503271845",
+      "aliases": [
+        "503271845"
+      ],
+      "doc_ids": [
+        "doc_0002"
+      ],
+      "pseudonym": "[REDACTED-1]"
+    },
+    "OTHER-0001": {
+      "canonical_id": "OTHER-0001",
+      "type": "OTHER",
+      "canonical_text": "590183274",
+      "aliases": [
+        "590183274"
+      ],
+      "doc_ids": [
+        "doc_0004"
+      ],
+      "pseudonym": "[REDACTED-2]"
+    },
+    "OTHER-0002": {
+      "canonical_id": "OTHER-0002",
+      "type": "OTHER",
+      "canonical_text": "LIT-2026-4412-Q",
+      "aliases": [
+        "LIT-2026-4412-Q"
+      ],
+      "doc_ids": [
+        "doc_0006"
+      ],
+      "pseudonym": "[REDACTED-3]"
+    },
+    "OTHER-0003": {
+      "canonical_id": "OTHER-0003",
+      "type": "OTHER",
+      "canonical_text": "NE-884712-09",
+      "aliases": [
+        "NE-884712-09"
+      ],
+      "doc_ids": [
+        "doc_0007"
+      ],
+      "pseudonym": "[REDACTED-4]"
+    },
+    "OTHER-0004": {
+      "canonical_id": "OTHER-0004",
+      "type": "OTHER",
+      "canonical_text": "MPAN-2100018765123",
+      "aliases": [
+        "MPAN-2100018765123"
+      ],
+      "doc_ids": [
+        "doc_0007"
+      ],
+      "pseudonym": "[REDACTED-5]"
+    },
+    "OTHER-0005": {
+      "canonical_id": "OTHER-0005",
+      "type": "OTHER",
+      "canonical_text": "A4B7C91234",
+      "aliases": [
+        "A4B7C91234"
+      ],
+      "doc_ids": [
+        "doc_0007"
+      ],
+      "pseudonym": "[REDACTED-6]"
+    },
+    "PERSON-0000": {
+      "canonical_id": "PERSON-0000",
+      "type": "PERSON",
+      "canonical_text": "Priya Patel",
+      "aliases": [
+        "Priya Patel"
+      ],
+      "doc_ids": [
+        "doc_0004",
+        "doc_0008",
+        "doc_0001"
+      ],
+      "pseudonym": "Agent A"
+    },
+    "PERSON-0001": {
+      "canonical_id": "PERSON-0001",
+      "type": "PERSON",
+      "canonical_text": "John Smith",
+      "aliases": [
+        "John Smith"
+      ],
+      "doc_ids": [
+        "doc_0007",
+        "doc_0002"
+      ],
+      "pseudonym": "Agent B"
+    },
+    "PERSON-0002": {
+      "canonical_id": "PERSON-0002",
+      "type": "PERSON",
+      "canonical_text": "Daniel Walsh",
+      "aliases": [
+        "Daniel Walsh"
+      ],
+      "doc_ids": [
+        "doc_0003"
+      ],
+      "pseudonym": "Agent C"
+    },
+    "PERSON-0003": {
+      "canonical_id": "PERSON-0003",
+      "type": "PERSON",
+      "canonical_text": "Stefan Novak",
+      "aliases": [
+        "Stefan Novak"
+      ],
+      "doc_ids": [
+        "doc_0005"
+      ],
+      "pseudonym": "Agent D"
+    },
+    "PERSON-0004": {
+      "canonical_id": "PERSON-0004",
+      "type": "PERSON",
+      "canonical_text": "Amara Okafor",
+      "aliases": [
+        "Amara Okafor"
+      ],
+      "doc_ids": [
+        "doc_0006"
+      ],
+      "pseudonym": "Agent E"
+    },
+    "PHONE-0000": {
+      "canonical_id": "PHONE-0000",
+      "type": "PHONE",
+      "canonical_text": "07700 900261",
+      "aliases": [
+        "07700 900261"
+      ],
+      "doc_ids": [
+        "doc_0004",
+        "doc_0008",
+        "doc_0001"
+      ],
+      "pseudonym": "[PHONE-1]"
+    },
+    "PHONE-0001": {
+      "canonical_id": "PHONE-0001",
+      "type": "PHONE",
+      "canonical_text": "07700 900142",
+      "aliases": [
+        "07700 900142"
+      ],
+      "doc_ids": [
+        "doc_0007",
+        "doc_0002"
+      ],
+      "pseudonym": "[PHONE-2]"
+    },
+    "PHONE-0002": {
+      "canonical_id": "PHONE-0002",
+      "type": "PHONE",
+      "canonical_text": "07700 900775",
+      "aliases": [
+        "07700 900775"
+      ],
+      "doc_ids": [
+        "doc_0003"
+      ],
+      "pseudonym": "[PHONE-3]"
+    },
+    "PHONE-0003": {
+      "canonical_id": "PHONE-0003",
+      "type": "PHONE",
+      "canonical_text": "07700 900503",
+      "aliases": [
+        "07700 900503"
+      ],
+      "doc_ids": [
+        "doc_0005"
+      ],
+      "pseudonym": "[PHONE-4]"
+    },
+    "PHONE-0004": {
+      "canonical_id": "PHONE-0004",
+      "type": "PHONE",
+      "canonical_text": "07700 900318",
+      "aliases": [
+        "07700 900318"
+      ],
+      "doc_ids": [
+        "doc_0006"
+      ],
+      "pseudonym": "[PHONE-5]"
+    },
+    "SSN-0000": {
+      "canonical_id": "SSN-0000",
+      "type": "SSN",
+      "canonical_text": "078-05-1120",
+      "aliases": [
+        "078-05-1120"
+      ],
+      "doc_ids": [
+        "doc_0003"
+      ],
+      "pseudonym": "[SSN-1]"
+    },
+    "OTHER-0006": {
+      "canonical_id": "OTHER-0000",
+      "type": "OTHER",
+      "canonical_text": "Invoice No: INV-2026-8847",
+      "aliases": [
+        "Invoice No: INV-2026-8847"
+      ],
+      "doc_ids": [
+        "job_1781973571222"
+      ],
+      "pseudonym": "[REDACTED-1]"
+    },
+    "PHONE-0005": {
+      "canonical_id": "PHONE-0000",
+      "type": "PHONE",
+      "canonical_text": "07924402685",
+      "aliases": [
+        "07924402685"
+      ],
+      "doc_ids": [
+        "job_1781973571222"
+      ],
+      "pseudonym": "[PHONE-6]"
+    },
+    "ADDRESS-0005": {
+      "canonical_id": "ADDRESS-0000",
+      "type": "ADDRESS",
+      "canonical_text": "NE1 1XX",
+      "aliases": [
+        "NE1 1XX"
+      ],
+      "doc_ids": [
+        "job_1781975242795"
+      ],
+      "pseudonym": "[ADDRESS-6]"
+    }
+  },
+  "version": "1.0"
+}
