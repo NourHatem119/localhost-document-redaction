@@ -1,0 +1,101 @@
+{
+  "entities": {
+    "ADDRESS-0000": {
+      "canonical_id": "ADDRESS-0000",
+      "type": "ADDRESS",
+      "canonical_text": "B15 3DH",
+      "aliases": [
+        "B15 3DH"
+      ],
+      "doc_ids": [
+        "job_1781969269609"
+      ],
+      "pseudonym": "[ADDRESS-1]"
+    },
+    "ADDRESS-0001": {
+      "canonical_id": "ADDRESS-0001",
+      "type": "ADDRESS",
+      "canonical_text": "5 Elmwood Court, Birmingham, B15 3DH",
+      "aliases": [
+        "5 Elmwood Court, Birmingham, B15 3DH"
+      ],
+      "doc_ids": [
+        "job_1781969269609"
+      ],
+      "pseudonym": "[ADDRESS-2]"
+    },
+    "DOB-0000": {
+      "canonical_id": "DOB-0000",
+      "type": "DOB",
+      "canonical_text": "1987-09-15",
+      "aliases": [
+        "1987-09-15"
+      ],
+      "doc_ids": [
+        "job_1781969269609"
+      ],
+      "pseudonym": "[DOB-1]"
+    },
+    "EMAIL-0000": {
+      "canonical_id": "EMAIL-0000",
+      "type": "EMAIL",
+      "canonical_text": "priya.patel@meridian-health.co.uk",
+      "aliases": [
+        "priya.patel@meridian-health.co.uk"
+      ],
+      "doc_ids": [
+        "job_1781969269609"
+      ],
+      "pseudonym": "[EMAIL-1]"
+    },
+    "NI_NUMBER-0000": {
+      "canonical_id": "NI_NUMBER-0000",
+      "type": "NI_NUMBER",
+      "canonical_text": "WK112233C",
+      "aliases": [
+        "WK112233C"
+      ],
+      "doc_ids": [
+        "job_1781969269609"
+      ],
+      "pseudonym": "[NI-1]"
+    },
+    "ORG-0000": {
+      "canonical_id": "ORG-0000",
+      "type": "ORG",
+      "canonical_text": "Meridian Health NHS Trust",
+      "aliases": [
+        "Meridian Health NHS Trust"
+      ],
+      "doc_ids": [
+        "job_1781969269609"
+      ],
+      "pseudonym": "Organization 1"
+    },
+    "OTHER-0000": {
+      "canonical_id": "OTHER-0000",
+      "type": "OTHER",
+      "canonical_text": "20 June 2026",
+      "aliases": [
+        "20 June 2026"
+      ],
+      "doc_ids": [
+        "job_1781969269609"
+      ],
+      "pseudonym": "[REDACTED-1]"
+    },
+    "PERSON-0000": {
+      "canonical_id": "PERSON-0000",
+      "type": "PERSON",
+      "canonical_text": "Priya Patel",
+      "aliases": [
+        "Priya Patel"
+      ],
+      "doc_ids": [
+        "job_1781969269609"
+      ],
+      "pseudonym": "Agent A"
+    }
+  },
+  "version": "1.0"
+}
