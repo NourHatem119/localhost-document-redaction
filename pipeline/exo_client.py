@@ -1,8 +1,10 @@
-"""OpenAI-compatible client for local LLM inference (EXO or Ollama fallback).
+"""OpenAI-compatible client for EXO local inference (primary) with Ollama fallback.
 
-Points at EXO's localhost endpoint by default; falls back to Ollama or
-llama.cpp if EXO is not available. The caller only sees a synchronous
-`detect(chunk_text) -> List[PIISpan]` interface.
+EXO is the primary endpoint for this hackathon (prize eligibility, partner
+technology). Ollama is an automatic fallback if EXO has no model loaded.
+
+The client auto-discovers the best available endpoint and, for EXO,
+auto-loads a lightweight model if the node is idle.
 """
 
 from __future__ import annotations
@@ -18,14 +20,22 @@ import requests
 from schema import Chunk, PIISpan, PIIType, PIISource
 
 
-# Default model — Ollama already has llama3.2:3b downloaded (2 GB, fast).
-_DEFAULT_MODEL = os.getenv("OBSCURA_LLM_MODEL", "llama3.2:3b")
+# Default EXO model: ~2.4 GB, fits in laptop RAM, fast enough for demo.
+_DEFAULT_EXO_MODEL = "mlx-community/Llama-3.1-Nemotron-Nano-4B-v1.1-4bit"
+# Default Ollama model (fallback).
+_DEFAULT_OLLAMA_MODEL = "llama3.2:3b"
 
-# Endpoint discovery: try env override first, then Ollama, then EXO.
+# Model selection: use env override, then auto-select based on endpoint.
+_DEFAULT_MODEL = os.getenv(
+    "OBSCURA_LLM_MODEL",
+    _DEFAULT_EXO_MODEL if os.getenv("OBSCURA_USE_EXO", "1") == "1" else _DEFAULT_OLLAMA_MODEL,
+)
+
+# Endpoint discovery: EXO first (primary), then Ollama (fallback), then env.
 _FALLBACKS = [
     os.getenv("OBSCURA_LLM_URL", ""),
-    "http://localhost:11434/v1/chat/completions",  # Ollama
-    "http://localhost:52415/v1/chat/completions",   # EXO
+    "http://localhost:52415/v1/chat/completions",   # EXO — primary
+    "http://localhost:11434/v1/chat/completions",  # Ollama — fallback
 ]
 
 # Prompt that constrains the LLM to emit strict JSON.
