@@ -1,0 +1,108 @@
+{
+  "doc_id": "doc_0004",
+  "doc_type": "MEDICAL_RECORD",
+  "persona_ids": [
+    "p_patel"
+  ],
+  "spans": [
+    {
+      "type": "ORG",
+      "text": "Meridian Health NHS Trust",
+      "char_start": 0,
+      "char_end": 25,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "PERSON",
+      "text": "Priya Patel",
+      "char_start": 120,
+      "char_end": 131,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "DOB",
+      "text": "1987-09-15",
+      "char_start": 147,
+      "char_end": 157,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "ADDRESS",
+      "text": "5 Elmwood Court, Birmingham, B15 3DH",
+      "char_start": 172,
+      "char_end": 208,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "OTHER",
+      "text": "590183274",
+      "char_start": 221,
+      "char_end": 230,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "NI_NUMBER",
+      "text": "WK112233C",
+      "char_start": 242,
+      "char_end": 251,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "ORG",
+      "text": "Meridian Health NHS Trust",
+      "char_start": 276,
+      "char_end": 301,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "MEDICAL",
+      "text": "Penicillin allergy; asthma, salbutamol inhaler PRN",
+      "char_start": 349,
+      "char_end": 399,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "MEDICAL",
+      "text": "intermittent shortness of breath on exertion",
+      "char_start": 448,
+      "char_end": 492,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "MEDICAL",
+      "text": "salbutamol inhaler as required",
+      "char_start": 522,
+      "char_end": 552,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "MEDICAL",
+      "text": "oral corticosteroids",
+      "char_start": 576,
+      "char_end": 596,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "EMAIL",
+      "text": "priya.patel@meridian-health.co.uk",
+      "char_start": 658,
+      "char_end": 691,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "PHONE",
+      "text": "07700 900261",
+      "char_start": 695,
+      "char_end": 707,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "ORG",
+      "text": "Meridian Health NHS Trust",
+      "char_start": 9189,
+      "char_end": 9214,
+      "persona_id": "p_patel"
+    }
+  ],
+  "images": []
+}

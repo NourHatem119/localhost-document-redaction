@@ -230,6 +230,61 @@ def build_bank_statement(doc_id: str, persona) -> SyntheticDocument:
     )
 
 
+def build_medical_record(doc_id: str, persona) -> SyntheticDocument:
+    """A patient clinical record (healthcare vertical). Exercises the MEDICAL
+    type — which is LLM-only, with no regex pattern — plus PERSON, ADDRESS,
+    DOB, NI_NUMBER, EMAIL, PHONE, ORG and an NHS number (OTHER).
+    """
+    pid = persona.persona_id
+    b = DocBuilder()
+
+    b.pii(persona.org, PIIType.ORG, pid).line()
+    b.line("PATIENT CLINICAL RECORD - CONFIDENTIAL").line()
+    b.add("Record generated: 20 June 2026").line().line()
+
+    b.line("Patient details")
+    b.add("Name: ").pii(persona.full_name, PIIType.PERSON, pid).line()
+    b.add("Date of birth: ").pii(persona.dob, PIIType.DOB, pid).line()
+    b.add("Home address: ").pii(persona.address, PIIType.ADDRESS, pid).line()
+    b.add("NHS number: ").pii(persona.other_id, PIIType.OTHER, pid).line()
+    b.add("NI number: ").pii(persona.ni_number, PIIType.NI_NUMBER, pid).line()
+    b.add("Registered GP practice: ").pii(persona.org, PIIType.ORG, pid).line()
+    b.line()
+
+    b.line("Clinical summary")
+    if persona.medical_note:
+        b.add("Active conditions and notes: ")
+        b.pii(persona.medical_note, PIIType.MEDICAL, pid).line(".")
+    b.add("The patient was reviewed in clinic and reports ")
+    b.pii("intermittent shortness of breath on exertion", PIIType.MEDICAL, pid)
+    b.line(".")
+    b.add("Current medication includes ")
+    b.pii("salbutamol inhaler as required", PIIType.MEDICAL, pid)
+    b.add(" and a recent course of ")
+    b.pii("oral corticosteroids", PIIType.MEDICAL, pid).line(".")
+    b.line()
+
+    b.line("Follow-up")
+    b.add("For appointment queries, contact the practice at ")
+    b.pii(persona.email, PIIType.EMAIL, pid).add(" or ")
+    b.pii(persona.phone, PIIType.PHONE, pid).line(".")
+
+    pad_to_words(b, DocType.MEDICAL_RECORD, target_words=3 * WORDS_PER_PAGE)
+    b.line().line()
+
+    b.add("Authorised by the clinical records team, ")
+    b.pii(persona.org, PIIType.ORG, pid).line(".")
+
+    return SyntheticDocument(
+        doc_id=doc_id,
+        doc_type=DocType.MEDICAL_RECORD,
+        text=b.text(),
+        spans=b.spans,
+        image_paths=[],
+        persona_ids=[pid],
+    )
+
+
 def render_pdf(doc: SyntheticDocument, pdf_path: str) -> None:
     """Render the canonical text to a simple, single-column A4 PDF.
 
@@ -379,6 +434,13 @@ def main() -> None:
     doc3 = build_bank_statement("doc_0003", persona3)
     entry3 = write_document(doc3)
     print(json.dumps(entry3, indent=2))
+
+    # doc_0004: medical record for Priya Patel — exercises the LLM-only MEDICAL
+    # type; Patel recurs (also in doc_0001) to drive Cognee cross-doc consistency.
+    persona4 = next(p for p in _recurring_personas() if p.persona_id == "p_patel")
+    doc4 = build_medical_record("doc_0004", persona4)
+    entry4 = write_document(doc4)
+    print(json.dumps(entry4, indent=2))
 
 
 if __name__ == "__main__":
