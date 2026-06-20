@@ -132,6 +132,11 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/pipeline")
+def pipeline_page():
+    return render_template("pipeline.html")
+
+
 @app.route("/api/status")
 def api_status():
     """Return EXO / Ollama connection status + pipeline config."""
@@ -420,6 +425,255 @@ async def _run_cognee_with_memory(doc_texts: dict, spans: List[PIISpan]) -> None
     """Async wrapper to run Cognee memory pipeline."""
     from cognee_mem.pipeline import run_with_memory
     await run_with_memory(doc_texts, spans)
+
+
+@app.route("/api/pipeline/data")
+def api_pipeline_data():
+    """Return detailed pipeline metadata and architecture for the pipeline viz page."""
+    from cognee_mem.memory_store import get_memory_stats
+
+    memory_stats = get_memory_stats()
+
+    pipeline_data = {
+        "pipeline": {
+            "name": "Obscura Enterprise Redaction Pipeline",
+            "version": "1.0",
+            "description": "Fully local, enterprise-grade PII redaction with cross-document consistent pseudonyms",
+            "features": [
+                "True redaction (text permanently removed, not covered)",
+                "Cross-document consistent pseudonyms",
+                "Memory-first entity detection (skips LLM for known entities)",
+                "Hybrid detection: regex + LLM",
+                "Fully local — no cloud API calls",
+                "UK-focused PII patterns (NI, phone, postcode)",
+                "PDF/DOCX/TXT support"
+            ],
+        },
+        "stages": [
+            {
+                "id": "ingest",
+                "name": "Document Ingestion",
+                "icon": "document",
+                "status": "active",
+                "description": "Parse PDF/DOCX/TXT into structured Document with exact character offsets and geometry.",
+                "input": ["PDF, DOCX, TXT file"],
+                "output": ["Document (pages, text, word_boxes, images)"],
+                "components": ["ingest.parse_pdf", "ingest.parse_docx", "ingest.parse_txt"],
+                "details": [
+                    "PyMuPDF for PDFs: extracts text, word-level bboxes, images",
+                    "python-docx for DOCX: extracts paragraphs, preserves structure",
+                    "TXT: plain text read, no geometry",
+                    "Images extracted to extracted/<doc_id>/ for vision pipeline"
+                ],
+                "perf_ms": 50,
+            },
+            {
+                "id": "chunk",
+                "name": "Chunking",
+                "icon": "split",
+                "status": "active",
+                "description": "Split document into chunks with absolute character offsets. Offsets are sacred.",
+                "input": ["Document"],
+                "output": ["Chunk[] (chunk_id, page_no, text, char_start, char_end)"],
+                "components": ["ingest.chunk.chunk_document"],
+                "details": [
+                    "Preserves absolute char offsets into full document text",
+                    "Each chunk is a self-contained unit for detection",
+                    "Offsets used downstream for bbox lookup and redaction"
+                ],
+                "perf_ms": 10,
+            },
+            {
+                "id": "regex",
+                "name": "Regex Detection",
+                "icon": "regex",
+                "status": "active",
+                "description": "Fast, exact pattern matching for structured PII. < 10ms per document.",
+                "input": ["Full document text"],
+                "output": ["PIISpan[] (regex source, confidence=1.0)"],
+                "components": ["pipeline.detect.detect_regex"],
+                "details": [
+                    "EMAIL: RFC 5322 simplified pattern",
+                    "PHONE: UK mobile format (+44 7xxx, 07xxx)",
+                    "NI_NUMBER: UK National Insurance AB123456C",
+                    "CREDIT_CARD: Visa, MC, Amex, Discover",
+                    "IBAN: ISO 13616 format",
+                    "DOB: YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY",
+                    "ADDRESS: UK postcode + street pattern"
+                ],
+                "perf_ms": 10,
+            },
+            {
+                "id": "memory",
+                "name": "Memory Check",
+                "icon": "memory",
+                "status": "active",
+                "description": "Scan text for known entities from previous runs. Skip LLM for known entities.",
+                "input": ["Full document text", "entity_memory.json"],
+                "output": ["PIISpan[] (memory source, confidence=1.0)"],
+                "components": ["cognee_mem.memory_store.find_known_spans_in_text"],
+                "details": [
+                    f"Currently {memory_stats.get('total_entities', 0)} entities in memory",
+                    "Aliases are searched case-sensitively for exact match",
+                    "Overlapping spans deduplicated (longest kept)",
+                    "Memory-first design reduces LLM calls 10-100x"
+                ],
+                "perf_ms": 50,
+            },
+            {
+                "id": "llm",
+                "name": "LLM Detection (EXO)",
+                "icon": "brain",
+                "status": "active" if _use_llm() else "disabled",
+                "description": "Contextual PII detection via local LLM. Only runs on unknown chunks (max 3).",
+                "input": ["Unknown chunks"],
+                "output": ["PIISpan[] (llm source, confidence ~0.8-0.95)"],
+                "components": ["pipeline.detect.detect_llm", "pipeline.exo_client.ExoClient"],
+                "details": [
+                    "EXO Labs endpoint: localhost:52415 (OpenAI-compatible)",
+                    "Ollama fallback: localhost:11434",
+                    "Model: Llama-3.1-Nemotron-Nano-4B (~2.4GB)",
+                    "Detects: PERSON, ADDRESS, ORG, MEDICAL, OTHER",
+                    "Offsets fixed by searching chunk text (LLM offsets unreliable)",
+                    "Limited to 3 chunks to prevent EXO timeout"
+                ],
+                "perf_ms": 4000,
+            },
+            {
+                "id": "merge",
+                "name": "Merge & Deduplicate",
+                "icon": "merge",
+                "status": "active",
+                "description": "Combine all spans and remove overlaps. Regex wins on exact matches.",
+                "input": ["Regex spans + Memory spans + LLM spans"],
+                "output": ["PIISpan[] (deduplicated, no overlaps)"],
+                "components": ["pipeline.detect.merge_spans"],
+                "details": [
+                    "Sort by (char_start, -char_end)",
+                    "Drop overlapping spans: keep first (regex) in ties",
+                    "Ensures no double-redaction of same text region"
+                ],
+                "perf_ms": 5,
+            },
+            {
+                "id": "resolve",
+                "name": "Entity Resolution",
+                "icon": "resolve",
+                "status": "active",
+                "description": "Group spans by canonical text + type. Create CanonicalEntity with aliases.",
+                "input": ["PIISpan[]"],
+                "output": ["CanonicalEntity[] (canonical_id, aliases, doc_ids)"],
+                "components": ["cognee_mem.dedup.resolve"],
+                "details": [
+                    "Variations of same entity merged (e.g., 'John Smith' + 'J. Smith')",
+                    "Canonical text is the longest alias",
+                    "doc_ids track which documents contain each entity"
+                ],
+                "perf_ms": 10,
+            },
+            {
+                "id": "pseudonyms",
+                "name": "Pseudonym Assignment",
+                "icon": "pseudonym",
+                "status": "active",
+                "description": "Assign deterministic pseudonyms (e.g., Person-001, Address-001). Cross-document consistent.",
+                "input": ["CanonicalEntity[]"],
+                "output": ["MasterMapping (entity -> pseudonym)"],
+                "components": ["cognee_mem.pseudonyms.assign_pseudonyms"],
+                "details": [
+                    "Pseudonym format: <Type>-<index> (e.g., Person-001, Email-003)",
+                    "Indices continue from existing memory entries",
+                    "Same entity always gets same pseudonym across all documents",
+                    "Prevents re-identification via cross-document correlation"
+                ],
+                "perf_ms": 5,
+            },
+            {
+                "id": "text_redact",
+                "name": "Text Redaction",
+                "icon": "text",
+                "status": "active",
+                "description": "Replace PII text with pseudonyms in the document text. Used for non-PDF output.",
+                "input": ["Document text, PIISpan[], MasterMapping"],
+                "output": ["Redacted text (.txt output)"],
+                "components": ["cognee_mem.redact.redact_corpus"],
+                "details": [
+                    "In-place replacement of span text with pseudonym",
+                    "Offsets shifted after each replacement",
+                    "Produces .txt output for DOCX/TXT inputs"
+                ],
+                "perf_ms": 50,
+            },
+            {
+                "id": "pdf_redact",
+                "name": "PDF True Redaction",
+                "icon": "pdf",
+                "status": "active",
+                "description": "Permanently remove text from PDF using PyMuPDF. Text is deleted, not covered.",
+                "input": ["Original PDF, PIISpan[], char_bboxes, MasterMapping"],
+                "output": ["Redacted PDF (text permanently removed)"],
+                "components": ["pipeline.redact.apply_redactions"],
+                "details": [
+                    "page.add_redact_annot(bbox, fill=black, text=pseudonym, text_color=white)",
+                    "page.apply_redactions() — text is permanently deleted from PDF stream",
+                    "Copy-paste from redacted PDF returns nothing for redacted regions",
+                    "Legal-grade true redaction (not cosmetic black boxes)",
+                    "Regex spans: exact char_bboxes lookup (precise)",
+                    "LLM spans: search_for() fallback (slower but works)"
+                ],
+                "perf_ms": 100,
+            },
+            {
+                "id": "persist",
+                "name": "Memory Persistence",
+                "icon": "save",
+                "status": "active",
+                "description": "Store new entities in JSON memory for future runs. Entities never re-learned.",
+                "input": ["MasterMapping (new entities)"],
+                "output": ["Updated entity_memory.json"],
+                "components": ["cognee_mem.memory_store.add_to_memory"],
+                "details": [
+                    "Merges by canonical_text + type (not canonical_id)",
+                    "Aliases and doc_ids accumulated across runs",
+                    "Future documents skip LLM for these entities",
+                    "JSON store used when full Cognee package unavailable"
+                ],
+                "perf_ms": 20,
+            },
+            {
+                "id": "cognee_graph",
+                "name": "Cognee Memory Graph",
+                "icon": "graph",
+                "status": "active" if _use_cognee_memory() else "disabled",
+                "description": "Build knowledge graph of entity-document relationships (optional, requires Cognee).",
+                "input": ["Document texts, PIISpan[]"],
+                "output": ["Cognee knowledge graph"],
+                "components": ["cognee_mem.pipeline.run_with_memory"],
+                "details": [
+                    "Requires OBSCURA_USE_COGNEE_MEMORY=true",
+                    "Builds entity-document relationship graph",
+                    "Provides cross-document entity exploration UI",
+                    "Async step — does not block redaction output"
+                ],
+                "perf_ms": 500,
+            },
+        ],
+        "memory_stats": memory_stats,
+        "config": {
+            "llm_enabled": _use_llm(),
+            "cognee_memory_enabled": _use_cognee_memory(),
+            "endpoint": _try_get_exo_endpoint(),
+        }
+    }
+    return jsonify(pipeline_data)
+
+
+def _try_get_exo_endpoint() -> str:
+    try:
+        client = ExoClient()
+        return client.base_url
+    except RuntimeError:
+        return "unavailable"
 
 
 if __name__ == "__main__":

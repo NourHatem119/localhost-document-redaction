@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pipeline — Obscura Redaction</title>
+    <style>
+        :root {
+            --bg: #0f0f0f;
+            --card: #1a1a1a;
+            --border: #2a2a2a;
+            --text: #e0e0e0;
+            --muted: #888;
+            --accent: #3b82f6;
+            --accent-dim: #1e3a5f;
+            --accent-glow: rgba(59, 130, 246, 0.15);
+            --error: #ef4444;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --disabled: #555;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        header {
+            width: 100%;
+            padding: 24px 40px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            background: rgba(15, 15, 15, 0.95);
+            backdrop-filter: blur(10px);
+            z-index: 100;
+        }
+        .logo { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; cursor: pointer; text-decoration: none; color: var(--text); }
+        .logo span { color: var(--accent); }
+        .nav-links { display: flex; gap: 24px; font-size: 14px; }
+        .nav-links a { color: var(--muted); text-decoration: none; transition: color 0.2s; }
+        .nav-links a:hover, .nav-links a.active { color: var(--accent); }
+        main { max-width: 900px; margin: 0 auto; padding: 40px 20px; display: flex; flex-direction: column; gap: 32px; }
+
+        .hero {
+            text-align: center;
+            padding: 40px 20px;
+        }
+        .hero h1 { font-size: 32px; font-weight: 700; margin-bottom: 12px; }
+        .hero p { color: var(--muted); font-size: 16px; max-width: 600px; margin: 0 auto 24px; line-height: 1.6; }
+        .hero .subtitle { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Flow diagram */
+        .flow-diagram {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 32px;
+            overflow-x: auto;
+        }
+        .flow-container { display: flex; flex-direction: column; gap: 0; position: relative; }
+        .flow-row { display: flex; align-items: center; gap: 12px; position: relative; }
+        .flow-stage {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px 18px;
+            min-width: 140px;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .flow-stage:hover { border-color: var(--accent); background: var(--accent-dim); }
+        .flow-stage.active { border-color: var(--accent); }
+        .flow-stage.disabled { opacity: 0.5; border-style: dashed; }
+        .flow-stage .stage-icon { font-size: 18px; display: block; margin-bottom: 6px; }
+        .flow-stage .stage-name { display: block; }
+        .flow-stage .stage-time { font-size: 10px; color: var(--muted); margin-top: 4px; }
+        .flow-arrow {
+            color: var(--muted);
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+        .flow-branch { display: flex; flex-direction: column; gap: 8px; }
+        .flow-join { display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; padding: 4px 0; }
+
+        /* Stage cards */
+        .stages-list { display: flex; flex-direction: column; gap: 16px; }
+        .stage-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: border-color 0.2s;
+        }
+        .stage-card:hover { border-color: var(--accent); }
+        .stage-card.disabled { opacity: 0.7; }
+        .stage-card.disabled .stage-header { border-left-color: var(--disabled); }
+        .stage-header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 18px 24px;
+            cursor: pointer;
+            border-left: 3px solid var(--accent);
+            transition: background 0.2s;
+        }
+        .stage-header:hover { background: var(--accent-glow); }
+        .stage-card.disabled .stage-header { border-left-color: var(--disabled); }
+        .stage-number {
+            width: 32px; height: 32px; border-radius: 8px;
+            background: var(--accent-dim); color: var(--accent);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 13px; font-weight: 700; flex-shrink: 0;
+        }
+        .stage-card.disabled .stage-number { background: #333; color: var(--disabled); }
+        .stage-info { flex: 1; }
+        .stage-name-text { font-size: 15px; font-weight: 600; }
+        .stage-desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
+        .stage-status {
+            font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+            padding: 4px 10px; border-radius: 4px; font-weight: 600;
+        }
+        .stage-status.active { background: var(--accent-dim); color: var(--accent); }
+        .stage-status.disabled { background: #333; color: var(--disabled); }
+        .stage-toggle { font-size: 12px; color: var(--muted); transition: transform 0.2s; }
+        .stage-card.expanded .stage-toggle { transform: rotate(180deg); }
+
+        .stage-body {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+        .stage-card.expanded .stage-body { max-height: 800px; }
+        .stage-body-inner { padding: 0 24px 24px 24px; }
+
+        .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+        .detail-box {
+            background: var(--bg);
+            border-radius: 8px;
+            padding: 14px;
+        }
+        .detail-box h4 { font-size: 11px; text-transform: uppercase; color: var(--muted); letter-spacing: 0.5px; margin-bottom: 8px; }
+        .detail-box ul { list-style: none; }
+        .detail-box li { font-size: 12px; padding: 3px 0; color: var(--text); display: flex; align-items: center; gap: 6px; }
+        .detail-box li::before { content: "→"; color: var(--accent); font-size: 10px; }
+        .detail-box .detail-note { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+
+        .detail-list { background: var(--bg); border-radius: 8px; padding: 14px; }
+        .detail-list h4 { font-size: 11px; text-transform: uppercase; color: var(--muted); letter-spacing: 0.5px; margin-bottom: 8px; }
+        .detail-list ul { list-style: none; }
+        .detail-list li { font-size: 12px; padding: 4px 0; color: var(--text); line-height: 1.5; }
+        .detail-list li::before { content: "•"; color: var(--accent); margin-right: 8px; }
+
+        .perf-badge {
+            display: inline-flex; align-items: center; gap: 6px;
+            font-size: 11px; color: var(--muted); margin-top: 8px;
+        }
+        .perf-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+
+        /* Stats bar */
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+        .stat-item { text-align: center; }
+        .stat-value { font-size: 24px; font-weight: 700; color: var(--accent); }
+        .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+
+        /* Features */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+        }
+        .feature-item {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px;
+            display: flex; align-items: center; gap: 10px;
+            font-size: 13px;
+        }
+        .feature-item .check { color: var(--success); font-weight: 700; }
+
+        /* Config table */
+        .config-table { width: 100%; border-collapse: collapse; }
+        .config-table th, .config-table td {
+            text-align: left; padding: 10px 12px; font-size: 13px;
+            border-bottom: 1px solid var(--border);
+        }
+        .config-table th { color: var(--muted); font-weight: 500; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }
+        .config-table td { color: var(--text); }
+        .config-badge {
+            display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;
+        }
+        .config-badge.on { background: var(--accent-dim); color: var(--accent); }
+        .config-badge.off { background: #333; color: var(--muted); }
+
+        /* Data flow diagram (ASCII-ish) */
+        .data-flow { font-family: 'SF Mono', 'Courier New', monospace; font-size: 12px; line-height: 1.8; color: var(--muted); background: var(--bg); border-radius: 8px; padding: 20px; overflow-x: auto; }
+        .data-flow .node { color: var(--accent); font-weight: 600; }
+        .data-flow .data { color: var(--text); }
+        .data-flow .arrow { color: var(--muted); }
+
+        .error-card {
+            background: #1f1010; border: 1px solid #3f2020; border-radius: 12px;
+            padding: 20px; color: var(--error); font-size: 14px; display: none;
+        }
+        .error-card.active { display: block; }
+
+        .loading { text-align: center; color: var(--muted); padding: 40px; font-size: 14px; }
+
+        @media (max-width: 600px) {
+            .detail-grid { grid-template-columns: 1fr; }
+            .flow-row { flex-wrap: wrap; }
+            header { padding: 16px 20px; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <a href="/" class="logo">obscura<span>.</span></a>
+        <nav class="nav-links">
+            <a href="/">Upload</a>
+            <a href="/pipeline" class="active">Pipeline</a>
+        </nav>
+    </header>
+
+    <main>
+        <div class="hero">
+            <div class="subtitle">Enterprise Redaction Pipeline</div>
+            <h1>Obscura Pipeline</h1>
+            <p>Fully local, end-to-end PII detection and redaction with cross-document consistent pseudonyms. Every stage is transparent, inspectable, and runs entirely on your machine.</p>
+        </div>
+
+        <div class="loading" id="loading">Loading pipeline configuration...</div>
+        <div class="error-card" id="error-card"></div>
+
+        <div id="content" style="display:none;">
+            <!-- Overview Stats -->
+            <div>
+                <div class="section-title">
+                    <span>📊</span> Live Stats
+                </div>
+                <div class="stats-bar" id="stats-bar">
+                    <div class="stat-item"><div class="stat-value" id="stat-stages">12</div><div class="stat-label">Pipeline Stages</div></div>
+                    <div class="stat-item"><div class="stat-value" id="stat-memory">0</div><div class="stat-label">Memory Entities</div></div>
+                    <div class="stat-item"><div class="stat-value" id="stat-llm">-</div><div class="stat-label">LLM Status</div></div>
+                    <div class="stat-item"><div class="stat-value" id="stat-cognee">-</div><div class="stat-label">Cognee Graph</div></div>
+                </div>
+            </div>
+
+            <!-- Flow Diagram -->
+            <div>
+                <div class="section-title">
+                    <span>🔄</span> Pipeline Flow
+                </div>
+                <div class="flow-diagram" id="flow-diagram">
+                    <!-- Rendered by JS -->
+                </div>
+            </div>
+
+            <!-- Data Flow -->
+            <div>
+                <div class="section-title">
+                    <span>📋</span> Data Flow
+                </div>
+                <div class="data-flow" id="data-flow"></div>
+            </div>
+
+            <!-- Stage Details -->
+            <div>
+                <div class="section-title">
+                    <span>🔧</span> Stage Details
+                </div>
+                <div class="stages-list" id="stages-list"></div>
+            </div>
+
+            <!-- Features -->
+            <div>
+                <div class="section-title">
+                    <span>✅</span> Key Features
+                </div>
+                <div class="features-grid" id="features-grid"></div>
+            </div>
+
+            <!-- Configuration -->
+            <div>
+                <div class="section-title">
+                    <span>⚙️</span> Configuration
+                </div>
+                <table class="config-table" id="config-table">
+                    <thead><tr><th>Setting</th><th>Value</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const ICONS = {
+            document: '📄', split: '✂️', regex: '🔍', memory: '💾',
+            brain: '🧠', merge: '🔗', resolve: '🧩', pseudonym: '🎭',
+            text: '✏️', pdf: '🚫', save: '💾', graph: '📊'
+        };
+
+        const STATUS_LABELS = { active: 'Enabled', disabled: 'Disabled' };
+
+        async function loadPipeline() {
+            try {
+                const resp = await fetch('/api/pipeline/data');
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                render(data);
+            } catch (err) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error-card').textContent = 'Failed to load pipeline data: ' + err.message;
+                document.getElementById('error-card').classList.add('active');
+            }
+        }
+
+        function render(data) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('content').style.display = 'block';
+
+            const stages = data.stages;
+            const config = data.config;
+            const memory = data.memory_stats;
+
+            // Stats
+            document.getElementById('stat-stages').textContent = stages.length;
+            document.getElementById('stat-memory').textContent = memory.total_entities || 0;
+            document.getElementById('stat-llm').textContent = config.llm_enabled ? 'ON' : 'OFF';
+            document.getElementById('stat-llm').style.color = config.llm_enabled ? 'var(--success)' : 'var(--error)';
+            document.getElementById('stat-cognee').textContent = config.cognee_memory_enabled ? 'ON' : 'OFF';
+            document.getElementById('stat-cognee').style.color = config.cognee_memory_enabled ? 'var(--success)' : 'var(--error)';
+
+            // Flow diagram
+            renderFlowDiagram(stages);
+
+            // Data flow text
+            renderDataFlow(stages);
+
+            // Stage cards
+            renderStageCards(stages);
+
+            // Features
+            renderFeatures(data.pipeline.features);
+
+            // Config
+            renderConfig(data.config, data.memory_stats);
+        }
+
+        function renderFlowDiagram(stages) {
+            const container = document.getElementById('flow-diagram');
+            // Group stages into logical rows for the diagram
+            const rows = [
+                [stages[0], stages[1]],  // Ingest, Chunk
+                stages.slice(2, 5),      // Regex, Memory, LLM (parallel-ish)
+                [stages[5]],             // Merge
+                stages.slice(6, 8),      // Resolve, Pseudonyms
+                [stages[8], stages[9]],  // Text redact, PDF redact
+                stages.slice(10)         // Persist, Cognee
+            ];
+
+            let html = '<div class="flow-container">';
+            rows.forEach((row, i) => {
+                if (Array.isArray(row) && row.length > 1) {
+                    html += '<div class="flow-row" style="flex-wrap:wrap; justify-content:center; gap:8px;">';
+                    row.forEach((stage, j) => {
+                        const disabled = stage.status === 'disabled';
+                        html += `<div class="flow-stage ${disabled ? 'disabled' : 'active'}" data-stage="${stage.id}">
+                            <span class="stage-icon">${ICONS[stage.icon] || '⚙️'}</span>
+                            <span class="stage-name">${stage.name}</span>
+                            <span class="stage-time">~${stage.perf_ms}ms</span>
+                        </div>`;
+                        if (j < row.length - 1) html += '<span class="flow-arrow">↔</span>';
+                    });
+                    html += '</div>';
+                } else {
+                    const stage = Array.isArray(row) ? row[0] : row;
+                    const disabled = stage.status === 'disabled';
+                    html += `<div class="flow-row" style="justify-content:center;">
+                        <div class="flow-stage ${disabled ? 'disabled' : 'active'}" data-stage="${stage.id}">
+                            <span class="stage-icon">${ICONS[stage.icon] || '⚙️'}</span>
+                            <span class="stage-name">${stage.name}</span>
+                            <span class="stage-time">~${stage.perf_ms}ms</span>
+                        </div>
+                    </div>`;
+                }
+                if (i < rows.length - 1) {
+                    html += '<div class="flow-join">↓</div>';
+                }
+            });
+            html += '</div>';
+            container.innerHTML = html;
+
+            // Click to expand corresponding stage card
+            container.querySelectorAll('.flow-stage').forEach(el => {
+                el.addEventListener('click', () => {
+                    const id = el.dataset.stage;
+                    const card = document.querySelector(`[data-stage-id="${id}"]`);
+                    if (card) {
+                        card.classList.toggle('expanded');
+                        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                });
+            });
+        }
+
+        function renderDataFlow(stages) {
+            const container = document.getElementById('data-flow');
+            let lines = [];
+            stages.forEach((stage, i) => {
+                const icon = ICONS[stage.icon] || '⚙️';
+                const status = stage.status === 'disabled' ? ' [DISABLED]' : '';
+                lines.push(`${icon}  <span class="node">${stage.name}</span>${status}`);
+                if (i < stages.length - 1) {
+                    const next = stages[i + 1];
+                    const out = stage.output[0] || 'data';
+                    const nextIn = next.input[0] || 'data';
+                    lines.push(`   <span class="arrow">│</span>  <span class="data">${out}</span> → <span class="data">${nextIn}</span>`);
+                    lines.push(`   <span class="arrow">↓</span>`);
+                }
+            });
+            container.innerHTML = lines.join('\n');
+        }
+
+        function renderStageCards(stages) {
+            const container = document.getElementById('stages-list');
+            container.innerHTML = stages.map((stage, i) => {
+                const disabled = stage.status === 'disabled';
+                const icon = ICONS[stage.icon] || '⚙️';
+                return `
+                <div class="stage-card ${disabled ? 'disabled' : ''}" data-stage-id="${stage.id}">
+                    <div class="stage-header" onclick="this.parentElement.classList.toggle('expanded')">
+                        <div class="stage-number">${i + 1}</div>
+                        <div class="stage-info">
+                            <div class="stage-name-text">${icon} ${stage.name}</div>
+                            <div class="stage-desc">${stage.description}</div>
+                        </div>
+                        <span class="stage-status ${stage.status}">${STATUS_LABELS[stage.status] || stage.status}</span>
+                        <span class="stage-toggle">▼</span>
+                    </div>
+                    <div class="stage-body">
+                        <div class="stage-body-inner">
+                            <div class="detail-grid">
+                                <div class="detail-box">
+                                    <h4>Input</h4>
+                                    <ul>${stage.input.map(x => `<li>${x}</li>`).join('')}</ul>
+                                </div>
+                                <div class="detail-box">
+                                    <h4>Output</h4>
+                                    <ul>${stage.output.map(x => `<li>${x}</li>`).join('')}</ul>
+                                </div>
+                            </div>
+                            <div class="detail-list">
+                                <h4>Components</h4>
+                                <ul>${stage.components.map(c => `<li><code>${c}</code></li>`).join('')}</ul>
+                            </div>
+                            <div class="detail-list" style="margin-top:12px;">
+                                <h4>Details</h4>
+                                <ul>${stage.details.map(d => `<li>${d}</li>`).join('')}</ul>
+                            </div>
+                            <div class="perf-badge">
+                                <span class="dot"></span>
+                                <span>Typical latency: ~${stage.perf_ms}ms</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                `;
+            }).join('');
+        }
+
+        function renderFeatures(features) {
+            document.getElementById('features-grid').innerHTML = features.map(f => `
+                <div class="feature-item"><span class="check">✓</span> ${f}</div>
+            `).join('');
+        }
+
+        function renderConfig(config, memory) {
+            const tbody = document.querySelector('#config-table tbody');
+            const rows = [
+                ['LLM Detection', config.llm_enabled, 'on'],
+                ['Cognee Memory Graph', config.cognee_memory_enabled, 'on'],
+                ['EXO/Ollama Endpoint', config.endpoint, 'text'],
+                ['Memory Entities', (memory.total_entities || 0) + ' stored', 'text'],
+                ['Memory File', memory.file_path || 'cognee_mem/entity_memory.json', 'text'],
+            ];
+            tbody.innerHTML = rows.map(([label, value, type]) => {
+                if (type === 'on') {
+                    const cls = value ? 'on' : 'off';
+                    const text = value ? 'Enabled' : 'Disabled';
+                    return `<tr><td>${label}</td><td><span class="config-badge ${cls}">${text}</span></td></tr>`;
+                }
+                return `<tr><td>${label}</td><td><code>${value}</code></td></tr>`;
+            }).join('');
+        }
+
+        loadPipeline();
+    </script>
+</body>
+</html>
