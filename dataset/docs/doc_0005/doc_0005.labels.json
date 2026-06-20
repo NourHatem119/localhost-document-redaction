@@ -1,0 +1,73 @@
+{
+  "doc_id": "doc_0005",
+  "doc_type": "INVOICE",
+  "persona_ids": [
+    "p_novak"
+  ],
+  "spans": [
+    {
+      "type": "PERSON",
+      "text": "Stefan Novak",
+      "char_start": 86,
+      "char_end": 98,
+      "persona_id": "p_novak"
+    },
+    {
+      "type": "ADDRESS",
+      "text": "92 Harbour View, Liverpool, L3 4BG",
+      "char_start": 99,
+      "char_end": 133,
+      "persona_id": "p_novak"
+    },
+    {
+      "type": "NI_NUMBER",
+      "text": "PR445566A",
+      "char_start": 154,
+      "char_end": 163,
+      "persona_id": "p_novak"
+    },
+    {
+      "type": "CREDIT_CARD",
+      "text": "4330792440268592",
+      "char_start": 619,
+      "char_end": 635,
+      "persona_id": "p_novak"
+    },
+    {
+      "type": "IBAN",
+      "text": "GB22MPCF76842684656321",
+      "char_start": 663,
+      "char_end": 685,
+      "persona_id": "p_novak"
+    },
+    {
+      "type": "EMAIL",
+      "text": "stefan.novak@northgate-finance.com",
+      "char_start": 707,
+      "char_end": 741,
+      "persona_id": "p_novak"
+    },
+    {
+      "type": "PHONE",
+      "text": "07700 900503",
+      "char_start": 745,
+      "char_end": 757,
+      "persona_id": "p_novak"
+    },
+    {
+      "type": "ORG",
+      "text": "Northgate Finance Ltd",
+      "char_start": 770,
+      "char_end": 791,
+      "persona_id": "p_novak"
+    },
+    {
+      "type": "ORG",
+      "text": "Northgate Finance Ltd",
+      "char_start": 9122,
+      "char_end": 9143,
+      "persona_id": "p_novak"
+    }
+  ],
+  "images": []
+}

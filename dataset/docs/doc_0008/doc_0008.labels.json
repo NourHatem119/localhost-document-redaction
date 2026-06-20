@@ -1,0 +1,73 @@
+{
+  "doc_id": "doc_0008",
+  "doc_type": "INVOICE",
+  "persona_ids": [
+    "p_patel"
+  ],
+  "spans": [
+    {
+      "type": "PERSON",
+      "text": "Priya Patel",
+      "char_start": 90,
+      "char_end": 101,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "ADDRESS",
+      "text": "5 Elmwood Court, Birmingham, B15 3DH",
+      "char_start": 102,
+      "char_end": 138,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "NI_NUMBER",
+      "text": "WK112233C",
+      "char_start": 159,
+      "char_end": 168,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "CREDIT_CARD",
+      "text": "30529170342366",
+      "char_start": 624,
+      "char_end": 638,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "IBAN",
+      "text": "GB73TPSZ71147104974650",
+      "char_start": 666,
+      "char_end": 688,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "EMAIL",
+      "text": "priya.patel@meridian-health.co.uk",
+      "char_start": 710,
+      "char_end": 743,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "PHONE",
+      "text": "07700 900261",
+      "char_start": 747,
+      "char_end": 759,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "ORG",
+      "text": "Meridian Health NHS Trust",
+      "char_start": 772,
+      "char_end": 797,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "ORG",
+      "text": "Meridian Health NHS Trust",
+      "char_start": 9128,
+      "char_end": 9153,
+      "persona_id": "p_patel"
+    }
+  ],
+  "images": []
+}

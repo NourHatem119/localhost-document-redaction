@@ -19,9 +19,13 @@ the graph explorer — but the redacted output never depends on it.
 
 from __future__ import annotations
 
+import os
+import sys
 from dataclasses import dataclass
 from typing import Dict, List
 
+# Repo-root schema.py is the sacred data contract.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from schema import PIISpan
 from cognee_mem.pseudonyms import MasterMapping, build_master_mapping
 from cognee_mem.redact import RedactionResult, redact_corpus

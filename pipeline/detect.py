@@ -18,6 +18,8 @@ from pipeline.exo_client import ExoClient
 
 # ── Regex patterns (UK-focused, fast, exact) ──────────────────────────────
 
+# ── Regex patterns (UK-focused, fast, exact) ──────────────────────────────
+
 _RE_EMAIL = re.compile(
     r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", re.IGNORECASE
 )
@@ -36,6 +38,15 @@ _RE_IBAN = re.compile(
 _RE_DOB = re.compile(
     r"\b(?:\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4}|\d{2}-\d{2}-\d{4})\b"
 )
+# UK postcode: B15 3DH, SW1A 1AA, etc.
+_RE_POSTCODE = re.compile(
+    r"\b([A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2})\b", re.IGNORECASE
+)
+# UK street address pattern: "number + street + city + postcode"
+_RE_ADDRESS = re.compile(
+    r"(\d+\s+[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?,\s*(?:[A-Z][a-zA-Z]+\s*)+,?\s*[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2})\b",
+    re.IGNORECASE
+)
 
 _PATTERNS: List[tuple] = [
     (_RE_EMAIL, PIIType.EMAIL),
@@ -44,6 +55,8 @@ _PATTERNS: List[tuple] = [
     (_RE_CREDIT_CARD, PIIType.CREDIT_CARD),
     (_RE_IBAN, PIIType.IBAN),
     (_RE_DOB, PIIType.DOB),
+    (_RE_POSTCODE, PIIType.ADDRESS),
+    (_RE_ADDRESS, PIIType.ADDRESS),
 ]
 
 
@@ -69,16 +82,63 @@ def detect_regex(text: str, doc_id: str) -> List[PIISpan]:
     return spans
 
 
+def _find_text_in_chunk(text: str, search: str) -> int:
+    """Find `search` inside `text`, handling whitespace differences (e.g. newline vs space)."""
+    # Exact match.
+    idx = text.find(search)
+    if idx != -1:
+        return idx
+    # Regex match: allow any whitespace between words.
+    parts = search.split()
+    if not parts:
+        return -1
+    pattern = r'\s*'.join(re.escape(p) for p in parts)
+    m = re.search(pattern, text)
+    if m:
+        return m.start()
+    return -1
+
+
 def detect_llm(chunks: List[Chunk], client: Optional[ExoClient] = None) -> List[PIISpan]:
-    """Run the local LLM over each chunk. Returns spans with document-level offsets."""
+    """Run the local LLM over each chunk. Returns spans with document-level offsets.
+
+    LLM offsets are often unreliable (return 0:0 or wrong values). We fix them
+    by searching for the exact text the LLM returned within the chunk text,
+    handling whitespace differences (newlines vs spaces in phone numbers, etc.).
+    """
     client = client or ExoClient()
     spans: List[PIISpan] = []
     for chunk in chunks:
         try:
-            spans.extend(client.detect(chunk))
+            raw_spans = client.detect(chunk)
         except RuntimeError as exc:
             # Log but do not crash the pipeline on one bad chunk.
             print(f"[WARN] LLM detection failed for chunk {chunk.chunk_id}: {exc}")
+            continue
+
+        for span in raw_spans:
+            # Fix offsets: search for the LLM text in chunk text.
+            idx = _find_text_in_chunk(chunk.text, span.text)
+            if idx == -1:
+                print(f"[WARN] LLM span text not found in chunk: {span.text!r}")
+                continue
+            # Chunk offset → document offset.
+            doc_start = chunk.char_start + idx
+            doc_end = doc_start + len(span.text)
+            spans.append(
+                PIISpan(
+                    span_id=span.span_id,
+                    doc_id=span.doc_id,
+                    chunk_id=span.chunk_id,
+                    type=span.type,
+                    text=span.text,
+                    char_start=doc_start,
+                    char_end=doc_end,
+                    confidence=span.confidence,
+                    source=span.source,
+                    status=span.status,
+                )
+            )
     return spans
 
 

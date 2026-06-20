@@ -1,0 +1,80 @@
+{
+  "doc_id": "doc_0006",
+  "doc_type": "EMPLOYMENT_LETTER",
+  "persona_ids": [
+    "p_okafor"
+  ],
+  "spans": [
+    {
+      "type": "PERSON",
+      "text": "Amara Okafor",
+      "char_start": 116,
+      "char_end": 128,
+      "persona_id": "p_okafor"
+    },
+    {
+      "type": "ADDRESS",
+      "text": "8 Foundry Lane, Bristol, BS1 6RT",
+      "char_start": 129,
+      "char_end": 161,
+      "persona_id": "p_okafor"
+    },
+    {
+      "type": "OTHER",
+      "text": "LIT-2026-4412-Q",
+      "char_start": 198,
+      "char_end": 213,
+      "persona_id": "p_okafor"
+    },
+    {
+      "type": "PERSON",
+      "text": "Amara Okafor",
+      "char_start": 731,
+      "char_end": 743,
+      "persona_id": "p_okafor"
+    },
+    {
+      "type": "DOB",
+      "text": "1990-11-27",
+      "char_start": 761,
+      "char_end": 771,
+      "persona_id": "p_okafor"
+    },
+    {
+      "type": "NI_NUMBER",
+      "text": "AB654321A",
+      "char_start": 797,
+      "char_end": 806,
+      "persona_id": "p_okafor"
+    },
+    {
+      "type": "EMAIL",
+      "text": "a.okafor@brightside-legal.co.uk",
+      "char_start": 818,
+      "char_end": 849,
+      "persona_id": "p_okafor"
+    },
+    {
+      "type": "PHONE",
+      "text": "07700 900318",
+      "char_start": 863,
+      "char_end": 875,
+      "persona_id": "p_okafor"
+    },
+    {
+      "type": "EMAIL",
+      "text": "a.okafor@brightside-legal.co.uk",
+      "char_start": 918,
+      "char_end": 949,
+      "persona_id": "p_okafor"
+    },
+    {
+      "type": "ORG",
+      "text": "Brightside Legal LLP",
+      "char_start": 1068,
+      "char_end": 1088,
+      "persona_id": "p_okafor"
+    }
+  ],
+  "images": []
+}

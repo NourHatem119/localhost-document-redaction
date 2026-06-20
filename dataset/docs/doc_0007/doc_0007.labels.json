@@ -1,0 +1,73 @@
+{
+  "doc_id": "doc_0007",
+  "doc_type": "BANK_STATEMENT",
+  "persona_ids": [
+    "p_smith"
+  ],
+  "spans": [
+    {
+      "type": "OTHER",
+      "text": "NE-884712-09",
+      "char_start": 60,
+      "char_end": 72,
+      "persona_id": "p_smith"
+    },
+    {
+      "type": "PERSON",
+      "text": "John Smith",
+      "char_start": 158,
+      "char_end": 168,
+      "persona_id": "p_smith"
+    },
+    {
+      "type": "ADDRESS",
+      "text": "14 Carlisle Road, Manchester, M20 4PL",
+      "char_start": 169,
+      "char_end": 206,
+      "persona_id": "p_smith"
+    },
+    {
+      "type": "OTHER",
+      "text": "MPAN-2100018765123",
+      "char_start": 236,
+      "char_end": 254,
+      "persona_id": "p_smith"
+    },
+    {
+      "type": "OTHER",
+      "text": "A4B7C91234",
+      "char_start": 269,
+      "char_end": 279,
+      "persona_id": "p_smith"
+    },
+    {
+      "type": "IBAN",
+      "text": "GB17KEMU01815908301661",
+      "char_start": 559,
+      "char_end": 581,
+      "persona_id": "p_smith"
+    },
+    {
+      "type": "EMAIL",
+      "text": "john.smith@meridian-health.co.uk",
+      "char_start": 643,
+      "char_end": 675,
+      "persona_id": "p_smith"
+    },
+    {
+      "type": "PHONE",
+      "text": "07700 900142",
+      "char_start": 684,
+      "char_end": 696,
+      "persona_id": "p_smith"
+    },
+    {
+      "type": "ORG",
+      "text": "Northern Energy plc",
+      "char_start": 709,
+      "char_end": 728,
+      "persona_id": "p_smith"
+    }
+  ],
+  "images": []
+}

@@ -1,5 +1,14 @@
 """Obscura Web UI — Flask app for local document redaction.
 
+Full pipeline: PDF/DOCX/TXT → ingest → detect (regex + LLM) →
+Cognee text redaction (cross-doc consistent pseudonyms) → PDF true redaction →
+Cognee memory graph (optional, needs exo).
+
+Output layout:
+    dataset/output/redacted/      — redacted PDFs/TXTs
+    dataset/output/pseudonyms/    — entity→pseudonym JSON mappings
+    dataset/output/extracted/     — images extracted during ingest (redirected)
+
 Run:
     python -m web.app
 
@@ -13,9 +22,9 @@ import os
 import tempfile
 import threading
 import time
-from dataclasses import asdict
+import traceback
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from flask import Flask, render_template, request, jsonify, send_file, abort
 
@@ -24,16 +33,93 @@ from ingest.chunk import chunk_document
 from pipeline.detect import detect_regex, detect_llm, merge_spans
 from pipeline.redact import apply_redactions, create_redaction_job
 from pipeline.exo_client import ExoClient
-from schema import PIISpan
+from schema import PIISpan, Document
+from cognee_mem.pipeline import PipelineOutput, run as cognee_run
+from cognee_mem.pseudonyms import MasterMapping
 
 app = Flask(__name__, template_folder="templates")
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 MB uploads
 
 # In-memory job store (for demo — no DB needed).
 _jobs: dict[str, dict] = {}
+
+# ---------------------------------------------------------------------------
+# Output directories — clean, organised layout
+# ---------------------------------------------------------------------------
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_OUTPUT_DIR = _PROJECT_ROOT / "dataset" / "output"
+_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+(_OUTPUT_DIR / "redacted").mkdir(exist_ok=True)
+(_OUTPUT_DIR / "pseudonyms").mkdir(exist_ok=True)
+(_OUTPUT_DIR / "extracted").mkdir(exist_ok=True)
+
+# Uploads still land in temp (they are originals, not outputs).
 _UPLOAD_DIR = Path(tempfile.gettempdir()) / "obscura_uploads"
 _UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _use_llm() -> bool:
+    return os.environ.get("OBSCURA_USE_LLM", "true").lower() in ("1", "true", "yes")
+
+
+def _use_cognee_memory() -> bool:
+    return os.environ.get("OBSCURA_USE_COGNEE_MEMORY", "true").lower() in ("1", "true", "yes")
+
+
+def _mapping_to_dict(mapping: MasterMapping) -> List[dict]:
+    """Convert MasterMapping to a flat list for the UI."""
+    out = []
+    for ent, pseudonym in mapping.entities:
+        out.append({
+            "canonical_id": ent.canonical_id,
+            "type": ent.type.value,
+            "canonical_text": ent.canonical_text,
+            "aliases": ent.aliases,
+            "pseudonym": pseudonym,
+            "doc_ids": ent.doc_ids,
+        })
+    return out
+
+
+def _span_to_dict(span: PIISpan) -> dict:
+    return {
+        "type": span.type.value,
+        "text": span.text,
+        "source": span.source,
+        "confidence": round(span.confidence, 2),
+    }
+
+
+def _set_job_status(job: dict, status: str, progress: int, **extra: Any) -> None:
+    job["status"] = status
+    job["progress"] = progress
+    job.update(extra)
+
+
+def _build_output_paths(original_filename: str, job_id: str) -> tuple[str, str, str]:
+    """Return (redacted_path, pseudonym_path, extracted_dir) based on the original filename."""
+    stem = Path(original_filename).stem
+    suffix = Path(original_filename).suffix.lower()
+    
+    # Redacted output: same suffix as input for PDF, .txt for others.
+    redacted_ext = suffix if suffix == ".pdf" else ".txt"
+    redacted_path = str(_OUTPUT_DIR / "redacted" / f"{stem}_redacted{redacted_ext}")
+    
+    # Pseudonym mapping: always JSON.
+    pseudonym_path = str(_OUTPUT_DIR / "pseudonyms" / f"{stem}_pseudonyms.json")
+    
+    # Extracted images land in a per-document subfolder.
+    extracted_dir = str(_OUTPUT_DIR / "extracted" / stem)
+    
+    return redacted_path, pseudonym_path, extracted_dir
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
 
 @app.route("/")
 def index():
@@ -42,16 +128,23 @@ def index():
 
 @app.route("/api/status")
 def api_status():
-    """Return EXO / Ollama connection status."""
+    """Return EXO / Ollama connection status + pipeline config."""
     try:
         client = ExoClient()
         return jsonify({
             "status": "ok",
             "endpoint": client.base_url,
             "model": client.model,
+            "llm_enabled": _use_llm(),
+            "cognee_memory_enabled": _use_cognee_memory(),
         })
     except RuntimeError as exc:
-        return jsonify({"status": "error", "message": str(exc)}), 503
+        return jsonify({
+            "status": "error",
+            "message": str(exc),
+            "llm_enabled": _use_llm(),
+            "cognee_memory_enabled": _use_cognee_memory(),
+        }), 503
 
 
 @app.route("/api/upload", methods=["POST"])
@@ -80,7 +173,10 @@ def api_upload():
         "progress": 0,
         "spans": [],
         "output_path": None,
+        "redacted_text": None,
+        "mapping": [],
         "error": None,
+        "stages": {},
     }
 
     # Start processing in background thread.
@@ -102,87 +198,205 @@ def api_job(job_id: str):
         "status": job["status"],
         "progress": job["progress"],
         "filename": job["filename"],
-        "spans": [span_to_dict(s) for s in job["spans"]],
+        "spans": [_span_to_dict(s) for s in job["spans"]],
+        "mapping": job.get("mapping", []),
         "output_path": job["output_path"],
+        "redacted_text": job.get("redacted_text"),
+        "stages": job.get("stages", {}),
         "error": job["error"],
     })
 
 
 @app.route("/api/download/<job_id>")
 def api_download(job_id: str):
-    """Download the redacted PDF."""
+    """Download the redacted output (PDF or text)."""
     job = _jobs.get(job_id)
     if not job or not job["output_path"]:
         abort(404)
-    return send_file(job["output_path"], as_attachment=True, download_name=f"{job['filename']}_redacted.pdf")
+    return send_file(
+        job["output_path"],
+        as_attachment=True,
+        download_name=f"{job['filename']}_redacted{Path(job['output_path']).suffix}",
+    )
 
+
+@app.route("/api/download_text/<job_id>")
+def api_download_text(job_id: str):
+    """Download the redacted text as a .txt file."""
+    job = _jobs.get(job_id)
+    if not job or not job.get("redacted_text"):
+        abort(404)
+    txt_path = _UPLOAD_DIR / f"{job_id}_redacted.txt"
+    txt_path.write_text(job["redacted_text"], encoding="utf-8")
+    return send_file(
+        str(txt_path),
+        as_attachment=True,
+        download_name=f"{job['filename']}_redacted.txt",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Background worker
+# ---------------------------------------------------------------------------
 
 def _process_job(job_id: str) -> None:
-    """Background worker: ingest → detect → redact."""
+    """Background worker: ingest → detect → text redaction → PDF redaction → Cognee memory."""
     job = _jobs[job_id]
+    doc_id = job_id
+    stages: dict = {}
+
     try:
-        job["status"] = "ingesting"
-        job["progress"] = 10
+        # ------------------------------------------------------------------
+        # 1. INGESTION
+        # ------------------------------------------------------------------
+        _set_job_status(job, "ingesting", 5, stages=stages)
+        document = parse_document(job["upload_path"], doc_id=doc_id)
+        chunks = chunk_document(document)
 
-        doc = parse_document(job["upload_path"], doc_id=job_id)
-        chunks = chunk_document(doc)
-        job["progress"] = 25
-
-        # Build char→bbox lookup (PDF only).
-        char_bboxes = {}
+        # Build char→bbox lookup from word boxes (PDF only; DOCX/TXT have no geometry).
+        char_bboxes: Dict[tuple, list] = {}
         doc_offset = 0
-        for page in doc.pages:
-            for c_start, c_end, bbox in page.word_boxes:
-                for offset in range(c_start + doc_offset, c_end + doc_offset):
-                    key = (job_id, offset)
+        for page in document.pages:
+            for char_start, char_end, bbox in page.word_boxes:
+                for offset in range(char_start + doc_offset, char_end + doc_offset):
+                    key = (doc_id, offset)
                     char_bboxes.setdefault(key, []).append((page.page_no, bbox))
             doc_offset += len(page.text)
 
-        job["status"] = "detecting"
-        job["progress"] = 40
+        stages["ingestion"] = {
+            "pages": len(document.pages),
+            "chunks": len(chunks),
+            "images": len(document.images),
+            "has_geometry": len(document.pages) > 0 and document.pages[0].width > 0,
+        }
+        _set_job_status(job, "ingesting", 20, stages=stages)
 
-        full_text = "".join(p.text for p in doc.pages)
-        regex_spans = detect_regex(full_text, job_id)
-        job["progress"] = 60
+        # ------------------------------------------------------------------
+        # 2. DETECTION (regex + optional LLM)
+        # ------------------------------------------------------------------
+        full_text = "".join(p.text for p in document.pages)
+        stages["text_length"] = len(full_text)
 
-        client = ExoClient()
-        llm_spans = detect_llm(chunks, client)
-        job["progress"] = 80
+        _set_job_status(job, "detecting_regex", 30, stages=stages)
+        regex_spans = detect_regex(full_text, doc_id)
+        stages["regex_spans"] = len(regex_spans)
 
+        llm_spans: List[PIISpan] = []
+        if _use_llm():
+            _set_job_status(job, "detecting_llm", 40, stages=stages)
+            try:
+                client = ExoClient()
+                llm_spans = detect_llm(chunks, client)
+                stages["llm_spans"] = len(llm_spans)
+            except RuntimeError as exc:
+                # LLM unavailable — continue with regex only, but record it.
+                stages["llm_error"] = str(exc)
+                stages["llm_spans"] = 0
+        else:
+            stages["llm_skipped"] = True
+
+        _set_job_status(job, "merging", 50, stages=stages)
         merged = merge_spans(regex_spans, llm_spans)
         job["spans"] = merged
-        job["status"] = "redacting"
+        stages["total_spans"] = len(merged)
 
-        output_path = str(_UPLOAD_DIR / f"{job_id}_redacted.pdf")
-        redact_job = create_redaction_job(
-            doc_id=job_id,
-            spans=merged,
-            output_path=output_path,
-        )
-        apply_redactions(
-            redact_job,
-            input_path=job["upload_path"],
-            output_path=output_path,
-            char_bboxes=char_bboxes if char_bboxes else None,
-        )
+        _set_job_status(job, "detecting", 55, stages=stages)
 
-        job["output_path"] = output_path
-        job["status"] = "done"
-        job["progress"] = 100
+        # ------------------------------------------------------------------
+        # 3. TEXT REDACTION (Cognee pipeline — deterministic, offline)
+        # ------------------------------------------------------------------
+        _set_job_status(job, "redacting_text", 60, stages=stages)
+        doc_texts = {doc_id: full_text}
+        pipeline_out = cognee_run(doc_texts, merged)
+        redacted_text = pipeline_out.redacted_texts.get(doc_id, full_text)
+        job["redacted_text"] = redacted_text
+        job["mapping"] = _mapping_to_dict(pipeline_out.mapping)
+        stages["replacements"] = sum(
+            r.replacements for r in pipeline_out.results
+        )
+        stages["entities"] = len(pipeline_out.mapping.entities)
+
+        _set_job_status(job, "redacting_text", 70, stages=stages)
+
+        # ------------------------------------------------------------------
+        # 4. REDACTED OUTPUT (clean, organised layout)
+        # ------------------------------------------------------------------
+        _set_job_status(job, "redacting_pdf", 75, stages=stages)
+        redacted_path, pseudonym_path, extracted_dir = _build_output_paths(
+            job["filename"], job_id
+        )
+        Path(redacted_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(pseudonym_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(extracted_dir).mkdir(parents=True, exist_ok=True)
+
+        is_pdf = Path(job["upload_path"]).suffix.lower() == ".pdf"
+        if is_pdf:
+            redact_job = create_redaction_job(
+                doc_id=doc_id,
+                spans=merged,
+                output_path=redacted_path,
+            )
+            apply_redactions(
+                redact_job,
+                input_path=job["upload_path"],
+                output_path=redacted_path,
+                char_bboxes=char_bboxes if char_bboxes else None,
+            )
+            job["output_path"] = redacted_path
+            stages["pdf_output"] = redacted_path
+        else:
+            # For DOCX/TXT: redacted text is the primary output.
+            Path(redacted_path).write_text(redacted_text, encoding="utf-8")
+            job["output_path"] = redacted_path
+            stages["text_output"] = redacted_path
+
+        _set_job_status(job, "redacting_pdf", 80, stages=stages)
+
+        # Write pseudonym mapping to the organised output folder.
+        with open(pseudonym_path, "w", encoding="utf-8") as f:
+            json.dump({
+                "doc_id": doc_id,
+                "original_filename": job["filename"],
+                "entities": job["mapping"],
+                "redacted_path": redacted_path,
+            }, f, indent=2)
+        stages["pseudonym_path"] = pseudonym_path
+
+        _set_job_status(job, "writing_outputs", 85, stages=stages)
+
+        # ------------------------------------------------------------------
+        # 5. COGNEE MEMORY GRAPH (optional, needs exo)
+        # ------------------------------------------------------------------
+        if _use_cognee_memory():
+            _set_job_status(job, "building_memory", 90, stages=stages)
+            try:
+                import asyncio
+                # Cognee pipeline.run_with_memory is async and needs exo.
+                asyncio.run(
+                    _run_cognee_with_memory(doc_texts, merged)
+                )
+                stages["cognee_memory"] = "ok"
+            except Exception as exc:
+                # Cognee memory is optional — don't fail the whole job.
+                stages["cognee_memory"] = f"skipped: {str(exc)}"
+        else:
+            stages["cognee_memory"] = "disabled"
+
+        _set_job_status(job, "done", 100, stages=stages)
 
     except Exception as exc:
+        traceback_str = traceback.format_exc()
         job["status"] = "error"
-        job["error"] = str(exc)
+        job["error"] = f"{exc}\n\n{traceback_str}"
         job["progress"] = 0
+        stages["error"] = str(exc)
+        job["stages"] = stages
 
 
-def span_to_dict(span: PIISpan) -> dict:
-    return {
-        "type": span.type.value,
-        "text": span.text,
-        "source": span.source,
-        "confidence": round(span.confidence, 2),
-    }
+async def _run_cognee_with_memory(doc_texts: dict, spans: List[PIISpan]) -> None:
+    """Async wrapper to run Cognee memory pipeline."""
+    from cognee_mem.pipeline import run_with_memory
+    await run_with_memory(doc_texts, spans)
 
 
 if __name__ == "__main__":

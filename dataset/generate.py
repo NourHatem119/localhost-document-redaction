@@ -285,6 +285,184 @@ def build_medical_record(doc_id: str, persona) -> SyntheticDocument:
     )
 
 
+def build_invoice(doc_id: str, persona) -> SyntheticDocument:
+    """A professional services invoice. Exercises PERSON, ORG, ADDRESS,
+    EMAIL, PHONE, CREDIT_CARD, NI_NUMBER, and ORG (issuer + recipient orgs).
+    """
+    pid = persona.persona_id
+    b = DocBuilder()
+
+    issuer = persona.org
+    b.line(issuer).line()
+    b.line("INVOICE")
+    b.add("Invoice No: INV-2026-8847").line()
+    b.add("Date: 20 June 2026").line().line()
+
+    b.line("Bill to:")
+    b.pii(persona.full_name, PIIType.PERSON, pid).line()
+    b.pii(persona.address, PIIType.ADDRESS, pid).line()
+    b.line()
+
+    b.add("Account reference: ").pii(persona.ni_number, PIIType.NI_NUMBER, pid).line()
+    b.line()
+
+    b.line("Description                          Qty    Rate      Amount")
+    b.line("-" * 60)
+    b.line("Professional services - consulting    12    185.00    2,220.00")
+    b.line("Disbursements - travel & subsistence  1    340.50      340.50")
+    b.line("Disbursements - document printing     1     78.00       78.00")
+    b.line("-" * 60)
+    b.line("Total due                                          2,639.50")
+    b.line()
+
+    b.add("Payment by card ending ").pii(persona.credit_card, PIIType.CREDIT_CARD, pid).line()
+    b.add("or direct transfer to IBAN ").pii(persona.iban, PIIType.IBAN, pid).line()
+    b.line()
+
+    b.add("For queries contact ").pii(persona.email, PIIType.EMAIL, pid)
+    b.add(" or ").pii(persona.phone, PIIType.PHONE, pid).line(".")
+    b.line()
+
+    b.add("Issued by ").pii(issuer, PIIType.ORG, pid).line(".")
+
+    pad_to_words(b, DocType.INVOICE, target_words=3 * WORDS_PER_PAGE)
+    b.line().line()
+
+    b.add("Registered office: ").pii(issuer, PIIType.ORG, pid).line(", VAT GB123456789.")
+
+    return SyntheticDocument(
+        doc_id=doc_id,
+        doc_type=DocType.INVOICE,
+        text=b.text(),
+        spans=b.spans,
+        image_paths=[],
+        persona_ids=[pid],
+    )
+
+
+def build_legal_discovery(doc_id: str, persona) -> SyntheticDocument:
+    """A legal discovery / litigation hold letter. Exercises PERSON, ORG,
+    ADDRESS, DOB, SSN, EMAIL, PHONE, NI_NUMBER, and OTHER (case reference).
+    """
+    pid = persona.persona_id
+    b = DocBuilder()
+
+    law_firm = "Brightside Legal LLP"
+    b.line(law_firm).line()
+    b.line("LITIGATION HOLD & DISCOVERY REQUEST")
+    b.add("Matter reference: LIT-2026-4412-Q").line()
+    b.add("Date: 20 June 2026").line().line()
+
+    b.add("To: ").pii(persona.full_name, PIIType.PERSON, pid).line()
+    b.pii(persona.address, PIIType.ADDRESS, pid).line()
+    b.line()
+
+    b.add("Re: Discovery obligations - Matter ").pii("LIT-2026-4412-Q", PIIType.OTHER, pid).line()
+    b.line()
+
+    b.add("Our client has instructed us to preserve all documents relating to the")
+    b.line("above matter. You are hereby notified that you must retain the following")
+    b.line("categories of records in their original form:")
+    b.line()
+
+    b.line("  1. All correspondence, memoranda, and electronic messages.")
+    b.line("  2. Financial records, bank statements, and transaction logs.")
+    b.line("  3. Employment records, contracts, and personnel files.")
+    b.line("  4. Medical records, clinical notes, and prescription records.")
+    b.line()
+
+    b.add("For identification purposes, the subject individual's details are:")
+    b.line()
+    b.add("  Full name: ").pii(persona.full_name, PIIType.PERSON, pid).line()
+    b.add("  Date of birth: ").pii(persona.dob, PIIType.DOB, pid).line()
+    if persona.ssn:
+        b.add("  US Social Security number: ").pii(persona.ssn, PIIType.SSN, pid).line()
+    b.add("  UK National Insurance: ").pii(persona.ni_number, PIIType.NI_NUMBER, pid).line()
+    b.add("  Contact: ").pii(persona.email, PIIType.EMAIL, pid).line()
+    b.add("  Telephone: ").pii(persona.phone, PIIType.PHONE, pid).line()
+    b.line()
+
+    b.add("Please confirm receipt of this notice to ").pii("a.okafor@brightside-legal.co.uk", PIIType.EMAIL, pid).line()
+    b.add(" or by post to the above address. Failure to comply may result in")
+    b.line("sanctions.")
+    b.line()
+
+    b.line("Yours faithfully,")
+    b.add("Amara Okafor, Partner, ").pii(law_firm, PIIType.ORG, pid).line()
+
+    pad_to_words(b, DocType.EMPLOYMENT_LETTER, target_words=3 * WORDS_PER_PAGE)
+    b.line().line()
+
+    b.add("Brightside Legal LLP is authorised and regulated by the Solicitors Regulation")
+    b.line("Authority. This communication is subject to legal professional privilege.")
+
+    return SyntheticDocument(
+        doc_id=doc_id,
+        doc_type=DocType.EMPLOYMENT_LETTER,
+        text=b.text(),
+        spans=b.spans,
+        image_paths=[],
+        persona_ids=[pid],
+    )
+
+
+def build_utility_bill(doc_id: str, persona) -> SyntheticDocument:
+    """A domestic energy/utility bill. Exercises PERSON, ADDRESS, ORG, EMAIL,
+    PHONE, IBAN, and OTHER (meter / account number).
+    """
+    pid = persona.persona_id
+    b = DocBuilder()
+
+    provider = "Northern Energy plc"
+    b.line(provider).line()
+    b.line("QUARTERLY ENERGY STATEMENT")
+    b.add("Account No: ").pii("NE-884712-09", PIIType.OTHER, pid).line()
+    b.add("Statement date: 20 June 2026").line()
+    b.add("Billing period: 01 March 2026 to 31 May 2026").line().line()
+
+    b.line("Customer:")
+    b.pii(persona.full_name, PIIType.PERSON, pid).line()
+    b.pii(persona.address, PIIType.ADDRESS, pid).line()
+    b.line()
+
+    b.line("Supply details")
+    b.add("Meter point: ").pii("MPAN-2100018765123", PIIType.OTHER, pid).line()
+    b.add("Meter serial: ").pii("A4B7C91234", PIIType.OTHER, pid).line()
+    b.line()
+
+    b.line("Charges")
+    b.line("  Electricity supplied (1,247 kWh)                198.42")
+    b.line("  Standing charge (91 days @ 0.52/day)             47.32")
+    b.line("  VAT @ 5%                                          12.29")
+    b.line("  Total amount due                                 258.03")
+    b.line()
+
+    b.add("Payment method: Direct debit from IBAN ").pii(persona.iban, PIIType.IBAN, pid).line()
+    b.line("Payment due date: 04 July 2026")
+    b.line()
+
+    b.add("For billing queries, contact ").pii(persona.email, PIIType.EMAIL, pid)
+    b.add(" or call ").pii(persona.phone, PIIType.PHONE, pid).line(".")
+    b.line()
+
+    b.add("Issued by ").pii(provider, PIIType.ORG, pid).line(".")
+
+    pad_to_words(b, DocType.BANK_STATEMENT, target_words=3 * WORDS_PER_PAGE)
+    b.line().line()
+
+    b.add("Northern Energy plc, Registered in England & Wales No. 03456789.")
+    b.add(" Registered office: 1 Power Station Way, Newcastle, NE1 1XX.")
+
+    return SyntheticDocument(
+        doc_id=doc_id,
+        doc_type=DocType.BANK_STATEMENT,
+        text=b.text(),
+        spans=b.spans,
+        image_paths=[],
+        persona_ids=[pid],
+    )
+
+
 def render_pdf(doc: SyntheticDocument, pdf_path: str) -> None:
     """Render the canonical text to a simple, single-column A4 PDF.
 
@@ -438,9 +616,29 @@ def main() -> None:
     # doc_0004: medical record for Priya Patel — exercises the LLM-only MEDICAL
     # type; Patel recurs (also in doc_0001) to drive Cognee cross-doc consistency.
     persona4 = next(p for p in _recurring_personas() if p.persona_id == "p_patel")
-    doc4 = build_medical_record("doc_0004", persona4)
-    entry4 = write_document(doc4)
-    print(json.dumps(entry4, indent=2))
+    # doc_0005: invoice for Stefan Novak - exercises INVOICE type + financial PII.
+    persona5 = next(p for p in _recurring_personas() if p.persona_id == "p_novak")
+    doc5 = build_invoice("doc_0005", persona5)
+    entry5 = write_document(doc5)
+    print(json.dumps(entry5, indent=2))
+
+    # doc_0006: legal discovery for Amara Okafor - exercises SSN + OTHER (case ref).
+    persona6 = next(p for p in _recurring_personas() if p.persona_id == "p_okafor")
+    doc6 = build_legal_discovery("doc_0006", persona6)
+    entry6 = write_document(doc6)
+    print(json.dumps(entry6, indent=2))
+
+    # doc_0007: utility bill for John Smith - exercises IBAN + OTHER (meter numbers).
+    persona7 = next(p for p in _recurring_personas() if p.persona_id == "p_smith")
+    doc7 = build_utility_bill("doc_0007", persona7)
+    entry7 = write_document(doc7)
+    print(json.dumps(entry7, indent=2))
+
+    # doc_0008: invoice for Priya Patel - cross-doc consistency with doc_0001 & doc_0004.
+    persona8 = next(p for p in _recurring_personas() if p.persona_id == "p_patel")
+    doc8 = build_invoice("doc_0008", persona8)
+    entry8 = write_document(doc8)
+    print(json.dumps(entry8, indent=2))
 
 
 if __name__ == "__main__":

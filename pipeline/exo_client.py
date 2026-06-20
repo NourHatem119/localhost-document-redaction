@@ -28,7 +28,7 @@ _DEFAULT_OLLAMA_MODEL = "llama3.2:3b"
 # Model selection: use env override, then auto-select based on endpoint.
 _DEFAULT_MODEL = os.getenv(
     "OBSCURA_LLM_MODEL",
-    _DEFAULT_EXO_MODEL if os.getenv("OBSCURA_USE_EXO", "1") == "1" else _DEFAULT_OLLAMA_MODEL,
+    _DEFAULT_OLLAMA_MODEL if os.getenv("OBSCURA_USE_OLLAMA", "0") == "1" else _DEFAULT_EXO_MODEL,
 )
 
 # Endpoint discovery: EXO first (primary), then Ollama (fallback), then env.
@@ -40,12 +40,10 @@ _FALLBACKS = [
 
 # Prompt that constrains the LLM to emit strict JSON.
 _SYSTEM_PROMPT = (
-    "You are a PII detection engine. "
-    "Find all personally identifiable information in the provided text. "
-    "Return a JSON array only. No markdown, no explanation. "
-    "Each object must have: type (one of PERSON, EMAIL, PHONE, ADDRESS, SSN, "
-    "NI_NUMBER, CREDIT_CARD, IBAN, DOB, ORG, MEDICAL, OTHER), "
-    "text (the exact substring), char_start (integer), char_end (integer)."
+    "Respond ONLY with a JSON array. No explanation, no markdown, no extra text. "
+    "Format: [{\"type\":\"PERSON\",\"text\":\"...\",\"char_start\":0,\"char_end\":5}]. "
+    "Types: PERSON, EMAIL, PHONE, ADDRESS, SSN, NI_NUMBER, CREDIT_CARD, IBAN, DOB, ORG, MEDICAL, OTHER. "
+    "If no PII found, return []."
 )
 
 
@@ -129,11 +127,30 @@ class ExoClient:
                 raise RuntimeError(f"LLM returned non-JSON: {content[:200]}") from exc
             raw = json.loads(match.group(0))
 
-        if not isinstance(raw, list):
+        # Accept either a list directly, or a dict with a list inside (e.g. {"results": [...]}).
+        items: List[dict] = []
+        if isinstance(raw, list):
+            items = raw
+        elif isinstance(raw, dict):
+            # Try common keys that might contain the array.
+            for key in ("results", "spans", "data", "pii", "items"):
+                if key in raw and isinstance(raw[key], list):
+                    items = raw[key]
+                    break
+            if not items:
+                # Try any list value in the dict.
+                for v in raw.values():
+                    if isinstance(v, list):
+                        items = v
+                        break
+        else:
+            raise RuntimeError(f"LLM returned unexpected JSON type: {type(raw).__name__}")
+
+        if not isinstance(items, list):
             raise RuntimeError(f"LLM returned non-array JSON: {type(raw).__name__}")
 
         spans: List[PIISpan] = []
-        for item in raw:
+        for item in items:
             if not isinstance(item, dict):
                 continue
             pii_type = self._normalize_type(item.get("type", "OTHER"))

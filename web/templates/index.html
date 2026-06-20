@@ -102,6 +102,42 @@
             font-size: 13px;
             color: var(--muted);
         }
+        .stages-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 16px;
+            font-size: 13px;
+        }
+        .stage-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 10px;
+            border-radius: 6px;
+            background: var(--bg);
+            opacity: 0.6;
+            transition: opacity 0.2s, background 0.2s;
+        }
+        .stage-item.active {
+            opacity: 1;
+            background: var(--accent-dim);
+        }
+        .stage-item.done {
+            opacity: 1;
+        }
+        .stage-name {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .stage-icon {
+            font-size: 12px;
+        }
+        .stage-detail {
+            color: var(--muted);
+            font-size: 11px;
+        }
         .spans-card {
             background: var(--card);
             border: 1px solid var(--border);
@@ -132,10 +168,55 @@
         .span-type.regex { background: #1e3a5f; color: #60a5fa; }
         .span-type.llm { background: #1e3f1e; color: #4ade80; }
         .span-text { color: var(--text); font-family: monospace; font-size: 13px; }
+        .mapping-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            display: none;
+        }
+        .mapping-card.active { display: block; }
+        .mapping-card h3 { font-size: 16px; margin-bottom: 16px; font-weight: 500; }
+        .mapping-list { display: flex; flex-direction: column; gap: 8px; }
+        .mapping-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            background: var(--bg);
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        .mapping-pseudonym {
+            font-family: monospace;
+            font-size: 12px;
+            color: var(--accent);
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: var(--accent-dim);
+        }
+        .mapping-aliases {
+            font-size: 11px;
+            color: var(--muted);
+            margin-top: 4px;
+        }
+        .mapping-info {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            gap: 2px;
+        }
+        .mapping-type {
+            font-size: 10px;
+            text-transform: uppercase;
+            color: var(--muted);
+            letter-spacing: 0.5px;
+        }
         .actions {
             display: flex;
             gap: 12px;
             margin-top: 16px;
+            flex-wrap: wrap;
         }
         .btn {
             padding: 10px 20px;
@@ -163,6 +244,30 @@
             color: var(--error);
         }
         .error-card.active { display: block; }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 12px;
+            margin-top: 16px;
+        }
+        .stat-box {
+            background: var(--bg);
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--accent);
+        }
+        .stat-label {
+            font-size: 11px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 4px;
+        }
     </style>
 </head>
 <body>
@@ -170,7 +275,7 @@
         <div class="logo">obscura<span>.</span></div>
         <div class="status" id="status">
             <span class="status-dot" id="status-dot"></span>
-            <span id="status-text">Checking EXO...</span>
+            <span id="status-text">Checking backend...</span>
         </div>
     </header>
 
@@ -183,12 +288,14 @@
 
         <div class="progress-card" id="progress-card">
             <div class="progress-info">
-                <span id="progress-status">Processing...</span>
+                <span id="progress-status">Waiting...</span>
                 <span id="progress-pct">0%</span>
             </div>
             <div class="progress-bar">
                 <div class="progress-bar-fill" id="progress-fill"></div>
             </div>
+            <div class="stages-list" id="stages-list"></div>
+            <div class="stats-grid" id="stats-grid"></div>
         </div>
 
         <div class="spans-card" id="spans-card">
@@ -196,9 +303,17 @@
             <div class="span-list" id="span-list"></div>
             <div class="actions">
                 <a href="#" class="btn btn-primary" id="download-btn" style="display:none;">
-                    Download Redacted PDF
+                    Download Redacted Output
+                </a>
+                <a href="#" class="btn btn-secondary" id="download-text-btn" style="display:none;">
+                    Download Redacted Text
                 </a>
             </div>
+        </div>
+
+        <div class="mapping-card" id="mapping-card">
+            <h3>Entity Mapping</h3>
+            <div class="mapping-list" id="mapping-list"></div>
         </div>
 
         <div class="error-card" id="error-card">
@@ -214,16 +329,31 @@
         const progressFill = document.getElementById('progress-fill');
         const progressStatus = document.getElementById('progress-status');
         const progressPct = document.getElementById('progress-pct');
+        const stagesList = document.getElementById('stages-list');
+        const statsGrid = document.getElementById('stats-grid');
         const spansCard = document.getElementById('spans-card');
         const spanList = document.getElementById('span-list');
         const spanCount = document.getElementById('span-count');
         const downloadBtn = document.getElementById('download-btn');
+        const downloadTextBtn = document.getElementById('download-text-btn');
+        const mappingCard = document.getElementById('mapping-card');
+        const mappingList = document.getElementById('mapping-list');
         const errorCard = document.getElementById('error-card');
         const errorText = document.getElementById('error-text');
         const statusDot = document.getElementById('status-dot');
         const statusText = document.getElementById('status-text');
 
-        // Check EXO status on load.
+        // Pipeline stage definitions for the UI.
+        const STAGES = [
+            { key: 'ingesting', label: 'Document Ingestion', icon: '📄' },
+            { key: 'detecting_regex', label: 'Regex Detection', icon: '🔍' },
+            { key: 'detecting_llm', label: 'LLM Detection (EXO)', icon: '🧠' },
+            { key: 'redacting_text', label: 'Text Redaction (Cognee)', icon: '✏️' },
+            { key: 'redacting_pdf', label: 'PDF True Redaction', icon: '🚫' },
+            { key: 'building_memory', label: 'Cognee Memory Graph', icon: '📊' },
+        ];
+
+        // Check backend status on load.
         fetch('/api/status')
             .then(r => r.json())
             .then(data => {
@@ -232,7 +362,7 @@
                     statusText.textContent = `${data.model} on ${data.endpoint.split('/')[2]}`;
                 } else {
                     statusDot.classList.add('error');
-                    statusText.textContent = data.message || 'EXO not running';
+                    statusText.textContent = data.message || 'Backend not running';
                 }
             })
             .catch(() => {
@@ -260,9 +390,13 @@
         function upload(file) {
             progressCard.classList.add('active');
             spansCard.classList.remove('active');
+            mappingCard.classList.remove('active');
             errorCard.classList.remove('active');
             downloadBtn.style.display = 'none';
+            downloadTextBtn.style.display = 'none';
             updateProgress(0, 'Uploading...');
+            renderStages({});
+            renderStats({});
 
             const form = new FormData();
             form.append('file', file);
@@ -282,11 +416,17 @@
                     .then(r => r.json())
                     .then(job => {
                         updateProgress(job.progress, job.status);
+                        renderStages(job.stages || {});
+                        renderStats(job.stages || {});
+
                         if (job.status === 'done') {
                             clearInterval(interval);
                             showSpans(job.spans);
+                            showMapping(job.mapping || []);
                             downloadBtn.href = `/api/download/${jobId}`;
                             downloadBtn.style.display = 'inline-flex';
+                            downloadTextBtn.href = `/api/download_text/${jobId}`;
+                            downloadTextBtn.style.display = 'inline-flex';
                         } else if (job.status === 'error') {
                             clearInterval(interval);
                             showError(job.error || 'Processing failed');
@@ -301,8 +441,99 @@
 
         function updateProgress(pct, status) {
             progressFill.style.width = pct + '%';
-            progressStatus.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+            progressStatus.textContent = status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
             progressPct.textContent = pct + '%';
+        }
+
+        function renderStages(stages) {
+            stagesList.innerHTML = '';
+            STAGES.forEach(stage => {
+                const isActive = stage.key === stages._current_stage ||
+                    (stage.key === 'detecting_llm' && (stages.llm_spans !== undefined || stages.llm_error));
+                const isDone = stages[stage.key] !== undefined;
+                const div = document.createElement('div');
+                div.className = 'stage-item' + (isActive ? ' active' : '') + (isDone ? ' done' : '');
+                const detail = getStageDetail(stage.key, stages);
+                div.innerHTML = `
+                    <div class="stage-name">
+                        <span class="stage-icon">${isDone ? '✓' : stage.icon}</span>
+                        <span>${stage.label}</span>
+                    </div>
+                    <span class="stage-detail">${detail}</span>
+                `;
+                stagesList.appendChild(div);
+            });
+        }
+
+        function getStageDetail(key, stages) {
+            if (key === 'ingesting') {
+                if (stages.pages !== undefined) {
+                    return `${stages.pages} pages, ${stages.chunks} chunks`;
+                }
+                return 'Parsing document...';
+            }
+            if (key === 'detecting_regex') {
+                if (stages.regex_spans !== undefined) {
+                    return `${stages.regex_spans} matches`;
+                }
+                return 'Pattern matching...';
+            }
+            if (key === 'detecting_llm') {
+                if (stages.llm_error) return 'LLM unavailable, skipped';
+                if (stages.llm_spans !== undefined) {
+                    return `${stages.llm_spans} matches`;
+                }
+                if (stages.llm_skipped) return 'Skipped';
+                return 'EXO inference...';
+            }
+            if (key === 'redacting_text') {
+                if (stages.replacements !== undefined) {
+                    return `${stages.replacements} replacements, ${stages.entities} entities`;
+                }
+                return 'Cognee pseudonymization...';
+            }
+            if (key === 'redacting_pdf') {
+                if (stages.pdf_output) return 'Done';
+                return 'Applying true redactions...';
+            }
+            if (key === 'building_memory') {
+                if (stages.cognee_memory === 'ok') return 'Graph built';
+                if (stages.cognee_memory) return 'Skipped';
+                return 'Building entity graph...';
+            }
+            return '';
+        }
+
+        function renderStats(stages) {
+            statsGrid.innerHTML = '';
+            if (stages.total_spans !== undefined) {
+                addStat('PII Spans', stages.total_spans);
+            }
+            if (stages.regex_spans !== undefined) {
+                addStat('Regex Matches', stages.regex_spans);
+            }
+            if (stages.llm_spans !== undefined) {
+                addStat('LLM Matches', stages.llm_spans);
+            }
+            if (stages.entities !== undefined) {
+                addStat('Entities', stages.entities);
+            }
+            if (stages.replacements !== undefined) {
+                addStat('Replacements', stages.replacements);
+            }
+            if (stages.chunks !== undefined) {
+                addStat('Chunks', stages.chunks);
+            }
+        }
+
+        function addStat(label, value) {
+            const div = document.createElement('div');
+            div.className = 'stat-box';
+            div.innerHTML = `
+                <div class="stat-value">${value}</div>
+                <div class="stat-label">${label}</div>
+            `;
+            statsGrid.appendChild(div);
         }
 
         function showSpans(spans) {
@@ -318,6 +549,28 @@
                 spanList.appendChild(div);
             });
             spansCard.classList.add('active');
+        }
+
+        function showMapping(mapping) {
+            if (!mapping || mapping.length === 0) {
+                mappingCard.classList.remove('active');
+                return;
+            }
+            mappingList.innerHTML = '';
+            mapping.forEach(m => {
+                const div = document.createElement('div');
+                div.className = 'mapping-item';
+                const aliases = (m.aliases || []).join(', ');
+                div.innerHTML = `
+                    <div class="mapping-info">
+                        <div class="mapping-type">${m.type}</div>
+                        <div class="mapping-aliases">${escapeHtml(aliases)}</div>
+                    </div>
+                    <span class="mapping-pseudonym">${escapeHtml(m.pseudonym)}</span>
+                `;
+                mappingList.appendChild(div);
+            });
+            mappingCard.classList.add('active');
         }
 
         function showError(msg) {
