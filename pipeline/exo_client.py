@@ -103,8 +103,29 @@ class ExoClient:
         except requests.RequestException as exc:
             raise RuntimeError(f"LLM request failed: {exc}") from exc
 
-        data = resp.json()
-        content = data["choices"][0]["message"]["content"]
+        try:
+            data = resp.json()
+        except json.JSONDecodeError as exc:
+            # Some local endpoints (e.g. Ollama stream) return multiple JSON objects
+            # separated by newlines. Try the first line/object.
+            try:
+                text = resp.text
+                first_obj = text.splitlines()[0].strip()
+                data = json.loads(first_obj)
+            except Exception:
+                raise RuntimeError(f"LLM returned non-JSON: {resp.text[:200]}") from exc
+
+        # Normalize response shape: extract content from OpenAI-compatible or Ollama formats.
+        if "choices" in data and data["choices"]:
+            content = data["choices"][0]["message"]["content"]
+        elif "response" in data:
+            content = data["response"]
+        elif "message" in data and "content" in data["message"]:
+            content = data["message"]["content"]
+        elif "content" in data:
+            content = data["content"]
+        else:
+            raise RuntimeError(f"Unexpected LLM response format: {json.dumps(data)[:200]}")
         return self._parse_response(content, chunk)
 
     def _parse_response(self, content: str, chunk: Chunk) -> List[PIISpan]:
