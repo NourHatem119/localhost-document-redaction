@@ -1,0 +1,1 @@
+# Obscura web UI — local Flask interface for document redaction demo.

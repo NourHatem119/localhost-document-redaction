@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Obscura — Local Document Redaction</title>
+    <style>
+        :root {
+            --bg: #0f0f0f;
+            --card: #1a1a1a;
+            --border: #2a2a2a;
+            --text: #e0e0e0;
+            --muted: #888;
+            --accent: #3b82f6;
+            --accent-dim: #1e3a5f;
+            --error: #ef4444;
+            --success: #22c55e;
+            --warning: #f59e0b;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        header {
+            width: 100%;
+            padding: 24px 40px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+        .logo span { color: var(--accent); }
+        .status {
+            font-size: 13px;
+            color: var(--muted);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .status-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--muted);
+        }
+        .status-dot.ok { background: var(--success); }
+        .status-dot.error { background: var(--error); }
+        main {
+            width: 100%;
+            max-width: 720px;
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+        .dropzone {
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            padding: 48px 32px;
+            text-align: center;
+            transition: all 0.2s;
+            cursor: pointer;
+            background: var(--card);
+        }
+        .dropzone:hover, .dropzone.dragover {
+            border-color: var(--accent);
+            background: var(--accent-dim);
+        }
+        .dropzone h2 { font-size: 18px; margin-bottom: 8px; font-weight: 500; }
+        .dropzone p { font-size: 14px; color: var(--muted); }
+        .dropzone input { display: none; }
+        .progress-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            display: none;
+        }
+        .progress-card.active { display: block; }
+        .progress-bar {
+            height: 6px;
+            background: var(--border);
+            border-radius: 3px;
+            overflow: hidden;
+            margin: 12px 0;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 3px;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+        .progress-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            color: var(--muted);
+        }
+        .spans-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            display: none;
+        }
+        .spans-card.active { display: block; }
+        .spans-card h3 { font-size: 16px; margin-bottom: 16px; font-weight: 500; }
+        .span-list { display: flex; flex-direction: column; gap: 8px; }
+        .span-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            background: var(--bg);
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        .span-type {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        .span-type.regex { background: #1e3a5f; color: #60a5fa; }
+        .span-type.llm { background: #1e3f1e; color: #4ade80; }
+        .span-text { color: var(--text); font-family: monospace; font-size: 13px; }
+        .actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+        }
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn:hover { opacity: 0.85; }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-secondary { background: var(--border); color: var(--text); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .error-card {
+            background: #1f1010;
+            border: 1px solid #3f2020;
+            border-radius: 12px;
+            padding: 24px;
+            display: none;
+            color: var(--error);
+        }
+        .error-card.active { display: block; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">obscura<span>.</span></div>
+        <div class="status" id="status">
+            <span class="status-dot" id="status-dot"></span>
+            <span id="status-text">Checking EXO...</span>
+        </div>
+    </header>
+
+    <main>
+        <div class="dropzone" id="dropzone">
+            <input type="file" id="file-input" accept=".pdf,.docx,.txt">
+            <h2>Drop a document here</h2>
+            <p>PDF, DOCX, or TXT — redacted locally, no cloud</p>
+        </div>
+
+        <div class="progress-card" id="progress-card">
+            <div class="progress-info">
+                <span id="progress-status">Processing...</span>
+                <span id="progress-pct">0%</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-bar-fill" id="progress-fill"></div>
+            </div>
+        </div>
+
+        <div class="spans-card" id="spans-card">
+            <h3>Detected PII (<span id="span-count">0</span>)</h3>
+            <div class="span-list" id="span-list"></div>
+            <div class="actions">
+                <a href="#" class="btn btn-primary" id="download-btn" style="display:none;">
+                    Download Redacted PDF
+                </a>
+            </div>
+        </div>
+
+        <div class="error-card" id="error-card">
+            <strong>Error</strong>
+            <p id="error-text"></p>
+        </div>
+    </main>
+
+    <script>
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('file-input');
+        const progressCard = document.getElementById('progress-card');
+        const progressFill = document.getElementById('progress-fill');
+        const progressStatus = document.getElementById('progress-status');
+        const progressPct = document.getElementById('progress-pct');
+        const spansCard = document.getElementById('spans-card');
+        const spanList = document.getElementById('span-list');
+        const spanCount = document.getElementById('span-count');
+        const downloadBtn = document.getElementById('download-btn');
+        const errorCard = document.getElementById('error-card');
+        const errorText = document.getElementById('error-text');
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+
+        // Check EXO status on load.
+        fetch('/api/status')
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    statusDot.classList.add('ok');
+                    statusText.textContent = `${data.model} on ${data.endpoint.split('/')[2]}`;
+                } else {
+                    statusDot.classList.add('error');
+                    statusText.textContent = data.message || 'EXO not running';
+                }
+            })
+            .catch(() => {
+                statusDot.classList.add('error');
+                statusText.textContent = 'Cannot reach backend';
+            });
+
+        // Drag and drop.
+        dropzone.addEventListener('click', () => fileInput.click());
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('dragover');
+        });
+        dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length) upload(files[0]);
+        });
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length) upload(fileInput.files[0]);
+        });
+
+        function upload(file) {
+            progressCard.classList.add('active');
+            spansCard.classList.remove('active');
+            errorCard.classList.remove('active');
+            downloadBtn.style.display = 'none';
+            updateProgress(0, 'Uploading...');
+
+            const form = new FormData();
+            form.append('file', file);
+
+            fetch('/api/upload', { method: 'POST', body: form })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) throw new Error(data.error);
+                    pollJob(data.job_id);
+                })
+                .catch(err => showError(err.message));
+        }
+
+        function pollJob(jobId) {
+            const interval = setInterval(() => {
+                fetch(`/api/job/${jobId}`)
+                    .then(r => r.json())
+                    .then(job => {
+                        updateProgress(job.progress, job.status);
+                        if (job.status === 'done') {
+                            clearInterval(interval);
+                            showSpans(job.spans);
+                            downloadBtn.href = `/api/download/${jobId}`;
+                            downloadBtn.style.display = 'inline-flex';
+                        } else if (job.status === 'error') {
+                            clearInterval(interval);
+                            showError(job.error || 'Processing failed');
+                        }
+                    })
+                    .catch(() => {
+                        clearInterval(interval);
+                        showError('Lost connection to backend');
+                    });
+            }, 500);
+        }
+
+        function updateProgress(pct, status) {
+            progressFill.style.width = pct + '%';
+            progressStatus.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+            progressPct.textContent = pct + '%';
+        }
+
+        function showSpans(spans) {
+            spanList.innerHTML = '';
+            spanCount.textContent = spans.length;
+            spans.forEach(s => {
+                const div = document.createElement('div');
+                div.className = 'span-item';
+                div.innerHTML = `
+                    <span class="span-text">${escapeHtml(s.text)}</span>
+                    <span class="span-type ${s.source}">${s.type} · ${s.source}</span>
+                `;
+                spanList.appendChild(div);
+            });
+            spansCard.classList.add('active');
+        }
+
+        function showError(msg) {
+            errorText.textContent = msg;
+            errorCard.classList.add('active');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

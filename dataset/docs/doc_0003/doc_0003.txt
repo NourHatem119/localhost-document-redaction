@@ -1,0 +1,21 @@
+Northgate Finance Ltd
+Monthly Account Statement
+Statement period: 01 May 2026 to 31 May 2026
+
+Account holder: Daniel Walsh
+Registered address: 27 Kingsway, Leeds, LS1 2HQ
+Date of birth: 1978-06-04
+IBAN: GB07OLJH23194875749118
+Debit card ending: 6011527601895556
+Tax reference (SSN): 078-05-1120
+
+Transactions
+  03 May  Direct debit - Northern Energy        -84.20
+  09 May  Card payment - Waitrose Leeds         -52.16
+  15 May  Salary credit                       +2,940.00
+  22 May  Transfer to savings                   -400.00
+  28 May  Card payment - Trainline              -39.85
+
+For queries contact us at daniel.walsh@northgate-finance.com or call 07700 900775.
+
+Issued by Northgate Finance Ltd.

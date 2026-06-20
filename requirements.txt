@@ -10,6 +10,9 @@ python-docx>=1.1.0
 PyMuPDF>=1.24.0          # fitz — PDF text extraction + true redaction
 requests>=2.31.0         # EXO / Ollama HTTP client
 
+# ── Web UI ──
+flask>=3.0.0             # Local web interface for hackathon demo
+
 # Optional: Presidio for structured PII detection (regex is built-in)
 # presidio-analyzer>=2.2.0
 # presidio-anonymizer>=2.2.0

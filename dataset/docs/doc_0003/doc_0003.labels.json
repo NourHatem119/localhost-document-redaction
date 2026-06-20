@@ -1,0 +1,80 @@
+{
+  "doc_id": "doc_0003",
+  "doc_type": "BANK_STATEMENT",
+  "persona_ids": [
+    "p_walsh"
+  ],
+  "spans": [
+    {
+      "type": "ORG",
+      "text": "Northgate Finance Ltd",
+      "char_start": 0,
+      "char_end": 21,
+      "persona_id": "p_walsh"
+    },
+    {
+      "type": "PERSON",
+      "text": "Daniel Walsh",
+      "char_start": 110,
+      "char_end": 122,
+      "persona_id": "p_walsh"
+    },
+    {
+      "type": "ADDRESS",
+      "text": "27 Kingsway, Leeds, LS1 2HQ",
+      "char_start": 143,
+      "char_end": 170,
+      "persona_id": "p_walsh"
+    },
+    {
+      "type": "DOB",
+      "text": "1978-06-04",
+      "char_start": 186,
+      "char_end": 196,
+      "persona_id": "p_walsh"
+    },
+    {
+      "type": "IBAN",
+      "text": "GB07OLJH23194875749118",
+      "char_start": 203,
+      "char_end": 225,
+      "persona_id": "p_walsh"
+    },
+    {
+      "type": "CREDIT_CARD",
+      "text": "6011527601895556",
+      "char_start": 245,
+      "char_end": 261,
+      "persona_id": "p_walsh"
+    },
+    {
+      "type": "SSN",
+      "text": "078-05-1120",
+      "char_start": 283,
+      "char_end": 294,
+      "persona_id": "p_walsh"
+    },
+    {
+      "type": "EMAIL",
+      "text": "daniel.walsh@northgate-finance.com",
+      "char_start": 613,
+      "char_end": 647,
+      "persona_id": "p_walsh"
+    },
+    {
+      "type": "PHONE",
+      "text": "07700 900775",
+      "char_start": 656,
+      "char_end": 668,
+      "persona_id": "p_walsh"
+    },
+    {
+      "type": "ORG",
+      "text": "Northgate Finance Ltd",
+      "char_start": 681,
+      "char_end": 702,
+      "persona_id": "p_walsh"
+    }
+  ],
+  "images": []
+}
