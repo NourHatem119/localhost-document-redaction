@@ -408,6 +408,53 @@ def detect_id_signature_heuristics(
 
 
 # ---------------------------------------------------------------------------
+# Whole-image signature detection
+# ---------------------------------------------------------------------------
+
+# An image is treated as a signature when its dark-ink coverage falls in this
+# band: enough strokes to be handwriting, but not a dense photo/solid block.
+_SIGNATURE_MIN_INK = 0.005   # >=0.5% dark pixels — rules out blank/near-blank
+_SIGNATURE_MAX_INK = 0.40    # <=40% dark pixels — rules out photos/solid fills
+
+
+def ink_ratio(image: np.ndarray) -> float:
+    """Fraction of dark (ink) pixels in the image via Otsu thresholding."""
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # Otsu picks the ink/background split automatically; ink is the dark side.
+    _t, mask = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    return float(np.count_nonzero(mask)) / float(mask.size)
+
+
+def detect_signature_image(
+    image: np.ndarray, doc_id: str, image_id: str, page_no: int
+) -> List[ImageRegion]:
+    """Flag a whole image as a SIGNATURE when it holds ink strokes.
+
+    Intended as a fallback for images with no face and no OCR text: a signature
+    strip is handwriting (ink) but not machine-readable. Returns a single region
+    covering the full image, or [] if ink coverage is outside the signature band.
+    """
+    h, w = image.shape[:2]
+    if h < 5 or w < 5:
+        return []
+    ratio = ink_ratio(image)
+    if not (_SIGNATURE_MIN_INK <= ratio <= _SIGNATURE_MAX_INK):
+        return []
+    return [
+        ImageRegion(
+            region_id=_new_region_id(),
+            doc_id=doc_id,
+            image_id=image_id,
+            page_no=page_no,
+            bbox=(0.0, 0.0, float(w), float(h)),
+            label="SIGNATURE",
+            confidence=0.6,
+            source="cv",
+        )
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Orchestrator
 # ---------------------------------------------------------------------------
 

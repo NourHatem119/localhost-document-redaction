@@ -3,25 +3,33 @@
 Runs the offline image detectors (YuNet faces + Tesseract OCR) over each image
 extracted by ingest, and returns regions grouped per image for redaction.
 
-Two safety gates:
+Safety gates:
   * TEXT_PII regions are kept only when Tesseract is actually available.
     Without it, `detect_image_pii` emits *mock* boxes; we drop those so the
     pipeline never blurs fabricated rectangles.
-  * The noisy ID/SIGNATURE contour heuristics are excluded — this pass covers
-    faces and OCR text only.
+  * The noisy ID/SIGNATURE contour heuristics are excluded.
+  * SIGNATURE fallback: an image with no face and no OCR text but visible ink
+    (e.g. a handwritten signature strip) is redacted whole.
 """
 
 from __future__ import annotations
 
+import cv2
+
 from typing import Dict, List
 
 from schema import Document, ImageRef, ImageRegion
-from image_vision.detector import detect_image_pii, is_tesseract_available
+from image_vision.detector import (
+    detect_image_pii,
+    detect_signature_image,
+    is_tesseract_available,
+)
 
 # Labels this pass will redact. FACE (YuNet) is always real; TEXT_PII is only
 # trustworthy when Tesseract is installed (otherwise it is mock output).
 _FACE_LABEL = "FACE"
 _TEXT_LABEL = "TEXT_PII"
+_SIGNATURE_LABEL = "SIGNATURE"
 
 
 def detect_document_images(
@@ -47,8 +55,10 @@ def detect_document_images(
             if progress:
                 faces = sum(1 for r in regions if r.label == _FACE_LABEL)
                 texts = sum(1 for r in regions if r.label == _TEXT_LABEL)
+                sigs = sum(1 for r in regions if r.label == _SIGNATURE_LABEL)
                 print(
-                    f"[INFO]   {ref.image_id}: {faces} face(s), {texts} text region(s)"
+                    f"[INFO]   {ref.image_id}: {faces} face(s), "
+                    f"{texts} text region(s), {sigs} signature(s)"
                 )
     return results
 
@@ -64,5 +74,17 @@ def _detect_one(ref: ImageRef, ocr_ready: bool) -> List[ImageRegion]:
             kept.append(region)
         elif region.label == _TEXT_LABEL and ocr_ready:
             kept.append(region)
-        # ID / SIGNATURE heuristics and mock text boxes are intentionally dropped.
+        # ID / SIGNATURE contour heuristics and mock text boxes are dropped.
+
+    # Signature fallback: only when nothing machine-detectable was found (no
+    # face, no OCR text). An ink-bearing image here is almost certainly a
+    # handwritten signature, which OCR/face detection cannot catch.
+    if not kept:
+        image = cv2.imread(ref.path)
+        if image is not None:
+            kept.extend(
+                detect_signature_image(
+                    image, ref.doc_id, ref.image_id, ref.page_no
+                )
+            )
     return kept
