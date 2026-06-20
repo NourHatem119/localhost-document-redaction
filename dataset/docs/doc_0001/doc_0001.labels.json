@@ -1,0 +1,65 @@
+{
+  "doc_id": "doc_0001",
+  "doc_type": "EMPLOYMENT_LETTER",
+  "persona_ids": [
+    "p_patel"
+  ],
+  "spans": [
+    {
+      "type": "PERSON",
+      "text": "Priya Patel",
+      "char_start": 52,
+      "char_end": 63,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "ORG",
+      "text": "Meridian Health NHS Trust",
+      "char_start": 113,
+      "char_end": 138,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "ADDRESS",
+      "text": "5 Elmwood Court, Birmingham, B15 3DH",
+      "char_start": 217,
+      "char_end": 253,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "DOB",
+      "text": "1987-09-15",
+      "char_start": 270,
+      "char_end": 280,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "NI_NUMBER",
+      "text": "WK112233C",
+      "char_start": 309,
+      "char_end": 318,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "EMAIL",
+      "text": "priya.patel@meridian-health.co.uk",
+      "char_start": 353,
+      "char_end": 386,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "PHONE",
+      "text": "07700 900261",
+      "char_start": 402,
+      "char_end": 414,
+      "persona_id": "p_patel"
+    },
+    {
+      "type": "ORG",
+      "text": "Meridian Health NHS Trust",
+      "char_start": 492,
+      "char_end": 517,
+      "persona_id": "p_patel"
+    }
+  ]
+}

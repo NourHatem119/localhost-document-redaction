@@ -1,2 +1,7 @@
 # Synthetic dataset generation
 Faker>=25.0.0
+# PDF rendering + synthetic image generation for fixtures
+reportlab>=4.0.0
+pillow>=10.0.0
+# DOCX rendering for mixed-format fixtures
+python-docx>=1.1.0
