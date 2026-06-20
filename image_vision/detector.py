@@ -309,7 +309,11 @@ def detect_text_pii(
             if not text:
                 continue
             conf = int(data["conf"][i])
-            if conf < 30:
+            # Redaction must favour catching text over precision: low-confidence
+            # tokens are often the most distorted PII (e.g. an ID number OCR'd at
+            # conf 14). Only drop Tesseract's "no text" sentinel (conf < 0) and
+            # require at least one alphanumeric char to avoid boxing pure noise.
+            if conf < 0 or not any(c.isalnum() for c in text):
                 continue
             x, y, w, h = data["left"][i], data["top"][i], data["width"][i], data["height"][i]
             regions.append(

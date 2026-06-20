@@ -17,8 +17,19 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from schema import ImageRegion
 
 
+# Padding (px) added around text boxes so glyph overhang is fully covered.
+_TEXT_PAD = 3
+# Fill colour for destroyed text regions (black).
+_TEXT_FILL = (0, 0, 0)
+
+
 def redact_image(image_path: str, regions: List[ImageRegion], output_path: str) -> str:
-    """Load image, apply strong blur + pixelation to each region, save result.
+    """Load image and irreversibly redact each region, then save.
+
+    Text regions (TEXT_PII) are filled solid with padding — blur/pixelation
+    leaves short text recoverable by OCR, so text must be destroyed, not
+    softened. Other regions (faces, ID, signature) are blurred + pixelated,
+    which is unrecoverable enough and visually reads as redaction.
 
     Parameters
     ----------
@@ -38,14 +49,23 @@ def redact_image(image_path: str, regions: List[ImageRegion], output_path: str) 
     if image is None:
         raise FileNotFoundError(f"Cannot read image: {image_path}")
 
+    img_h, img_w = image.shape[:2]
     for region in regions:
         x0, y0, x1, y1 = region.bbox
-        x0_i = max(0, int(x0))
-        y0_i = max(0, int(y0))
-        x1_i = min(image.shape[1], int(x1))
-        y1_i = min(image.shape[0], int(y1))
+        is_text = region.label == "TEXT_PII"
+        pad = _TEXT_PAD if is_text else 0
+
+        x0_i = max(0, int(x0) - pad)
+        y0_i = max(0, int(y0) - pad)
+        x1_i = min(img_w, int(x1) + pad)
+        y1_i = min(img_h, int(y1) + pad)
 
         if x1_i <= x0_i or y1_i <= y0_i:
+            continue
+
+        if is_text:
+            # Solid fill: OCR cannot recover anything from a flat rectangle.
+            cv2.rectangle(image, (x0_i, y0_i), (x1_i, y1_i), _TEXT_FILL, thickness=-1)
             continue
 
         roi = image[y0_i:y1_i, x0_i:x1_i]
