@@ -95,6 +95,66 @@
         "job_1781969269609"
       ],
       "pseudonym": "Agent A"
+    },
+    "ADDRESS-0002": {
+      "canonical_id": "ADDRESS-0000",
+      "type": "ADDRESS",
+      "canonical_text": "M20 4PL",
+      "aliases": [
+        "M20 4PL"
+      ],
+      "doc_ids": [
+        "job_1781972548109"
+      ],
+      "pseudonym": "[ADDRESS-3]"
+    },
+    "ADDRESS-0003": {
+      "canonical_id": "ADDRESS-0001",
+      "type": "ADDRESS",
+      "canonical_text": "14 Carlisle Road, Manchester, M20 4PL",
+      "aliases": [
+        "14 Carlisle Road, Manchester, M20 4PL"
+      ],
+      "doc_ids": [
+        "job_1781972548109"
+      ],
+      "pseudonym": "[ADDRESS-4]"
+    },
+    "DOB-0001": {
+      "canonical_id": "DOB-0000",
+      "type": "DOB",
+      "canonical_text": "1984-03-12",
+      "aliases": [
+        "1984-03-12"
+      ],
+      "doc_ids": [
+        "job_1781972548109"
+      ],
+      "pseudonym": "[DOB-2]"
+    },
+    "EMAIL-0001": {
+      "canonical_id": "EMAIL-0000",
+      "type": "EMAIL",
+      "canonical_text": "john.smith@meridian-health.co.uk",
+      "aliases": [
+        "john.smith@meridian-health.co.uk"
+      ],
+      "doc_ids": [
+        "job_1781972548109"
+      ],
+      "pseudonym": "[EMAIL-2]"
+    },
+    "PHONE-0000": {
+      "canonical_id": "PHONE-0000",
+      "type": "PHONE",
+      "canonical_text": "07700 900142",
+      "aliases": [
+        "07700 900142"
+      ],
+      "doc_ids": [
+        "job_1781972548109"
+      ],
+      "pseudonym": "[PHONE-1]"
     }
   },
   "version": "1.0"
