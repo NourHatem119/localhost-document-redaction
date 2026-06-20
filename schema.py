@@ -41,6 +41,10 @@ ImageSource = str  # "captur" | "cv"
 # Axis-aligned bounding box [x0, y0, x1, y1].
 BBox = Tuple[float, float, float, float]
 
+# A word positioned in canonical page text: (char_start, char_end, bbox).
+# char offsets index into Page.text; bbox is the word's box on the page.
+WordBox = Tuple[int, int, BBox]
+
 
 @dataclass
 class Page:
@@ -48,6 +52,11 @@ class Page:
     width: float
     height: float
     text: str
+    # NO-GEOMETRY CONTRACT: only PDF pages carry geometry. DOCX/TXT pages have
+    # width=height=0.0 and word_boxes=[]; their chunks get bbox=None. Code that
+    # draws redaction rectangles must branch on word_boxes/bbox and fall back to
+    # text-only redaction when geometry is absent.
+    word_boxes: List[WordBox] = field(default_factory=list)
 
 
 @dataclass
