@@ -32,7 +32,7 @@ from reportlab.pdfgen import canvas
 from schema import PIIType
 from dataset.schema import DocType, ImageAsset, LabeledSpan, SyntheticDocument
 from dataset.personas import _recurring_personas, get_persona, seed
-from dataset.images import make_driving_licence
+from dataset.images import make_id_card, make_signature
 
 DOCS_DIR = os.path.join(os.path.dirname(__file__), "docs")
 
@@ -120,9 +120,10 @@ def build_employment_letter(doc_id: str, persona) -> SyntheticDocument:
 
 def build_hr_onboarding(doc_id: str, persona, images_dir: str) -> SyntheticDocument:
     """An HR onboarding / right-to-work verification form. Exercises text PII
-    (PERSON, ADDRESS, DOB, NI_NUMBER, EMAIL, PHONE, ORG, OTHER) and embeds a
-    realistic UK driving licence carrying a real face (FACE), the card layout
-    (ID), printed details (TEXT_PII) and a handwritten signature (SIGNATURE).
+    (PERSON, ADDRESS, DOB, NI_NUMBER, EMAIL, PHONE, ORG, OTHER) and embeds two
+    images: a photo ID card carrying a real face (FACE), the card layout (ID)
+    and printed details (TEXT_PII); and a separate handwritten signature
+    (SIGNATURE) below it.
     """
     pid = persona.persona_id
     b = DocBuilder()
@@ -141,20 +142,27 @@ def build_hr_onboarding(doc_id: str, persona, images_dir: str) -> SyntheticDocum
     b.add("Contact phone: ").pii(persona.phone, PIIType.PHONE, pid).line()
     b.line()
 
-    b.line("Identity verified by UK driving licence (scan attached below).")
+    b.line("Identity verified by photo ID card (scan attached below).")
     b.line()
     b.line("I confirm the above details are correct and that I have the right")
     b.add("to work for ").pii(persona.org, PIIType.ORG, pid).line(".")
+    b.line()
+    b.line("Signed (employee signature below):")
 
     os.makedirs(images_dir, exist_ok=True)
-    licence = make_driving_licence(
-        os.path.join(images_dir, "driving_licence.png"),
+    id_card = make_id_card(
+        os.path.join(images_dir, "id_card.png"),
         full_name=persona.full_name,
         dob_iso=persona.dob,
         address=persona.address,
         persona_id=pid,
     )
-    images = [licence]
+    signature = make_signature(
+        os.path.join(images_dir, "signature.png"),
+        full_name=persona.full_name,
+        persona_id=pid,
+    )
+    images = [id_card, signature]
 
     return SyntheticDocument(
         doc_id=doc_id,

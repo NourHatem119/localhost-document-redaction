@@ -12,7 +12,9 @@ Passport number: 503271845
 Contact email: john.smith@meridian-health.co.uk
 Contact phone: 07700 900142
 
-Identity verified by UK driving licence (scan attached below).
+Identity verified by photo ID card (scan attached below).
 
 I confirm the above details are correct and that I have the right
 to work for Meridian Health NHS Trust.
+
+Signed (employee signature below):

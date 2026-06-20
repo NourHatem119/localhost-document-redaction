@@ -222,3 +222,6 @@ __marimo__/
 
 # Microsoft Office lock files
 ~$*
+
+# Redaction pipeline test outputs (generated from the dataset, not source)
+*_redacted_*.pdf

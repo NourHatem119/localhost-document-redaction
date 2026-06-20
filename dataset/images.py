@@ -19,7 +19,6 @@ ID, FACE, SIGNATURE, TEXT_PII.
 
 from __future__ import annotations
 
-import math
 import os
 import urllib.request
 
@@ -96,110 +95,62 @@ def _render_signature(full_name: str, size: tuple = (440, 150)) -> Image.Image:
     return img
 
 
-def _draw_guilloche(draw: ImageDraw.ImageDraw, box, colour, lines: int = 26) -> None:
-    """Draw a subtle interference/guilloché security pattern inside `box`."""
-    x0, y0, x1, y1 = box
-    w = x1 - x0
-    h = y1 - y0
-    for i in range(lines):
-        pts = []
-        phase = i * 0.5
-        for px in range(0, int(w), 6):
-            t = px / w * math.tau * 3
-            py = y0 + h / 2 + math.sin(t + phase) * (h / 2 - 4) * math.cos(phase * 0.3)
-            pts.append((x0 + px, py))
-        draw.line(pts, fill=colour, width=1)
+def make_id_card(path: str, full_name: str, dob_iso: str, address: str,
+                 persona_id: str | None = None,
+                 size: tuple = (640, 400)) -> ImageAsset:
+    """A clean photo-ID card: solid header band, a real face in the photo box
+    on the left, and a printed personal-details block on the right.
 
-
-def make_driving_licence(path: str, full_name: str, dob_iso: str, address: str,
-                         persona_id: str | None = None,
-                         size: tuple = (1012, 638)) -> ImageAsset:
-    """Composite a realistic UK DVLA driving-licence photocard.
-
-    Embeds the real GAN face in the photo box and a handwritten signature in
-    field 7. Emits four gold regions: ID (whole card), FACE (photo), SIGNATURE,
-    and TEXT_PII (the printed personal-details block).
+    Emits three gold regions: ID (whole card), FACE (photo), and TEXT_PII (the
+    printed details block). The signature is emitted as its own image so the
+    vision track gets a clean, isolated SIGNATURE target.
     """
     w, h = size
     surname = full_name.split()[-1]
     first_name = full_name.split()[0]
     dd, mm, yyyy = dob_iso.split("-")[2], dob_iso.split("-")[1], dob_iso.split("-")[0]
     dob_uk = f"{dd}.{mm}.{yyyy}"
-    driver_no = _dvla_driver_number(surname, first_name, dob_iso)
+    doc_number = _dvla_driver_number(surname, first_name, dob_iso)
 
-    # Card base with the lilac/pink wash of a UK licence.
-    img = Image.new("RGB", size, (236, 222, 234))
+    img = Image.new("RGB", size, (228, 236, 246))
     draw = ImageDraw.Draw(img)
-    draw.rectangle([0, 0, w, int(h * 0.42)], fill=(231, 206, 222))
-    draw.rectangle([0, int(h * 0.42), w, h], fill=(238, 228, 236))
-    _draw_guilloche(draw, (0, 0, w, h), (224, 205, 220), lines=30)
 
-    pad = int(w * 0.03)
-    draw.rectangle([4, 4, w - 5, h - 5], outline=(150, 120, 150), width=2)
+    # Card border (ID region) and solid header band.
+    draw.rectangle([4, 4, w - 5, h - 5], outline=(40, 60, 110), width=3)
+    header_h = int(h * 0.16)
+    draw.rectangle([4, 4, w - 5, header_h], fill=(40, 60, 110))
+    title_font = _font(_SANS_BOLD_FONTS, px=int(header_h * 0.42))
+    draw.text((20, int(header_h * 0.28)), "UNITED KINGDOM  -  IDENTITY CARD",
+              fill=(255, 255, 255), font=title_font)
 
-    # Header band.
-    header_h = int(h * 0.12)
-    draw.rectangle([0, 0, w, header_h], fill=(123, 36, 92))
-    flag_box = (pad, int(header_h * 0.2), pad + int(header_h * 0.9), int(header_h * 0.85))
-    draw.rectangle(flag_box, fill=(0, 33, 99))
-    draw.line([flag_box[0:2], flag_box[2:4]], fill=(255, 255, 255), width=3)
-    draw.line([(flag_box[2], flag_box[1]), (flag_box[0], flag_box[3])], fill=(255, 255, 255), width=3)
-    draw.line([((flag_box[0]+flag_box[2])//2, flag_box[1]), ((flag_box[0]+flag_box[2])//2, flag_box[3])], fill=(200, 16, 46), width=4)
-    draw.line([(flag_box[0], (flag_box[1]+flag_box[3])//2), (flag_box[2], (flag_box[1]+flag_box[3])//2)], fill=(200, 16, 46), width=4)
-    title_font = _font(_SANS_BOLD_FONTS, px=int(header_h * 0.5))
-    draw.text((flag_box[2] + pad, int(header_h * 0.25)), "DRIVING LICENCE", fill=(255, 255, 255), font=title_font)
-
-    # Photo box (FACE) on the left.
+    # Photo box (FACE) on the left, holding the real face.
+    pad = int(w * 0.035)
     photo_x0 = pad
     photo_y0 = header_h + pad
-    photo_w = int(w * 0.26)
-    photo_h = int(photo_w * 1.25)
+    photo_w = int(w * 0.30)
+    photo_h = int(photo_w * 1.2)
     face = _fetch_face_image(size=max(photo_w, photo_h))
     face = face.resize((photo_w, photo_h), Image.LANCZOS)
     img.paste(face, (photo_x0, photo_y0))
     draw.rectangle([photo_x0, photo_y0, photo_x0 + photo_w, photo_y0 + photo_h],
-                   outline=(120, 90, 120), width=2)
+                   outline=(40, 60, 110), width=2)
     face_box = (photo_x0, photo_y0, photo_x0 + photo_w, photo_y0 + photo_h)
 
-    # Numbered personal-details fields (TEXT_PII).
-    label_font = _font(_SANS_FONTS, px=15)
-    value_font = _font(_SANS_BOLD_FONTS, px=20)
-    fx = photo_x0 + photo_w + pad
-    fy = header_h + pad
-    line_gap = int((h - fy - pad) / 7)
-
-    fields = [
-        ("1.", surname.upper()),
-        ("2.", first_name.upper()),
-        ("3.", f"{dob_uk}  UNITED KINGDOM"),
-        ("4a.", "01.05.2019"),
-        ("4b.", "30.04.2029"),
-        ("4c.", "DVLA"),
-        ("5.", driver_no),
+    # Printed personal-details block (TEXT_PII) on the right.
+    label_font = _font(_SANS_FONTS, px=18)
+    text_x = photo_x0 + photo_w + pad
+    text_top = header_h + pad + 6
+    line_h = 34
+    lines = [
+        f"Surname:  {surname}",
+        f"Given names:  {first_name}",
+        f"Date of birth:  {dob_uk}",
+        f"Document No:  {doc_number}",
+        "Nationality:  British",
     ]
-    text_top = fy
-    for i, (num, value) in enumerate(fields):
-        ly = fy + i * line_gap
-        draw.text((fx, ly), num, fill=(90, 60, 90), font=label_font)
-        draw.text((fx + int(w * 0.05), ly - 2), value, fill=(30, 20, 40), font=value_font)
-    text_box = (fx, text_top - 2, w - pad, fy + len(fields) * line_gap)
-
-    # Field 8 (address) under the photo.
-    addr_y = photo_y0 + photo_h + int(pad * 0.4)
-    draw.text((photo_x0, addr_y), "8.", fill=(90, 60, 90), font=label_font)
-    draw.text((photo_x0 + 24, addr_y), address, fill=(30, 20, 40), font=_font(_SANS_FONTS, px=16))
-    text_box = (min(text_box[0], photo_x0), text_box[1], max(text_box[2], w - pad), addr_y + 22)
-
-    # Signature (field 7) bottom-right.
-    sig = _render_signature(full_name)
-    sig_w = int(w * 0.30)
-    sig_h = int(sig.height * (sig_w / sig.width))
-    sig = sig.resize((sig_w, sig_h), Image.LANCZOS)
-    sig_x = w - pad - sig_w
-    sig_y = h - pad - sig_h
-    img.paste(sig, (sig_x, sig_y), sig)
-    draw.text((sig_x, sig_y - 18), "7.", fill=(90, 60, 90), font=label_font)
-    sig_box = (sig_x, sig_y, sig_x + sig_w, sig_y + sig_h)
+    for i, line in enumerate(lines):
+        draw.text((text_x, text_top + i * line_h), line, fill=(20, 30, 60), font=label_font)
+    text_box = (text_x, text_top, w - pad, text_top + line_h * len(lines))
 
     img.save(path)
     return ImageAsset(
@@ -211,6 +162,28 @@ def make_driving_licence(path: str, full_name: str, dob_iso: str, address: str,
             LabeledImageRegion(label="ID", bbox=(4, 4, w - 5, h - 5), persona_id=persona_id),
             LabeledImageRegion(label="FACE", bbox=face_box, persona_id=persona_id),
             LabeledImageRegion(label="TEXT_PII", bbox=text_box, persona_id=persona_id),
-            LabeledImageRegion(label="SIGNATURE", bbox=sig_box, persona_id=persona_id),
         ],
+    )
+
+
+def make_signature(path: str, full_name: str, persona_id: str | None = None,
+                   size: tuple = (520, 200)) -> ImageAsset:
+    """A standalone handwritten signature on a white card (SIGNATURE target)."""
+    w, h = size
+    img = Image.new("RGB", size, (255, 255, 255))
+    draw = ImageDraw.Draw(img)
+    sig = _render_signature(full_name, size=(int(w * 0.84), int(h * 0.7)))
+    sx = (w - sig.width) // 2
+    sy = (h - sig.height) // 2 - int(h * 0.05)
+    img.paste(sig, (sx, sy), sig)
+    draw.line([(int(w * 0.08), int(h * 0.78)), (int(w * 0.92), int(h * 0.78))],
+              fill=(120, 120, 120), width=2)
+    img.save(path)
+    sig_box = (sx, sy, sx + sig.width, sy + sig.height)
+    return ImageAsset(
+        image_id=os.path.splitext(os.path.basename(path))[0],
+        path=path,
+        width=w,
+        height=h,
+        regions=[LabeledImageRegion(label="SIGNATURE", bbox=sig_box, persona_id=persona_id)],
     )

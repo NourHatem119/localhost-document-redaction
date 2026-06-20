@@ -57,55 +57,63 @@
     {
       "type": "ORG",
       "text": "Meridian Health NHS Trust",
-      "char_start": 482,
-      "char_end": 507,
+      "char_start": 477,
+      "char_end": 502,
       "persona_id": "p_smith"
     }
   ],
   "images": [
     {
-      "image_id": "driving_licence",
-      "path": "images/driving_licence.png",
-      "width": 1012,
-      "height": 638,
+      "image_id": "id_card",
+      "path": "images/id_card.png",
+      "width": 640,
+      "height": 400,
       "regions": [
         {
           "label": "ID",
           "bbox": [
             4,
             4,
-            1007,
-            633
+            635,
+            395
           ],
           "persona_id": "p_smith"
         },
         {
           "label": "FACE",
           "bbox": [
-            30,
-            106,
-            293,
-            434
+            22,
+            86,
+            214,
+            316
           ],
           "persona_id": "p_smith"
         },
         {
           "label": "TEXT_PII",
           "bbox": [
-            30,
-            104,
-            982,
-            468
+            236,
+            92,
+            618,
+            262
           ],
           "persona_id": "p_smith"
-        },
+        }
+      ]
+    },
+    {
+      "image_id": "signature",
+      "path": "images/signature.png",
+      "width": 520,
+      "height": 200,
+      "regions": [
         {
           "label": "SIGNATURE",
           "bbox": [
-            679,
-            505,
-            982,
-            608
+            42,
+            20,
+            478,
+            160
           ],
           "persona_id": "p_smith"
         }
