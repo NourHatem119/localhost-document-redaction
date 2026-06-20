@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import string
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 from schema import PIIType
 from cognee_mem.dedup import CanonicalEntity, resolve
@@ -79,10 +79,10 @@ class MasterMapping:
         return self.by_surface.get(surface)
 
 
-def assign_pseudonyms(entities: List[CanonicalEntity]) -> MasterMapping:
+def assign_pseudonyms(entities: List[CanonicalEntity], starting_counters: Optional[Dict[PIIType, int]] = None) -> MasterMapping:
     """Assign one stable pseudonym per canonical entity. Pure / offline."""
     mapping = MasterMapping()
-    counters: Dict[PIIType, int] = {}
+    counters: Dict[PIIType, int] = dict(starting_counters) if starting_counters else {}
     # Stable order so pseudonyms are reproducible run-to-run.
     for ent in sorted(entities, key=lambda e: e.canonical_id):
         idx = counters.get(ent.type, 0)
@@ -95,6 +95,41 @@ def assign_pseudonyms(entities: List[CanonicalEntity]) -> MasterMapping:
             mapping.by_surface[surface] = pseudonym
         mapping.entities.append((ent, pseudonym))
     return mapping
+
+
+def _get_next_indices(existing_pseudonyms: List[str]) -> Dict[PIIType, int]:
+    """Extract the maximum index used for each pseudonym type from existing pseudonyms."""
+    counters: Dict[PIIType, int] = {}
+    for pseudo in existing_pseudonyms:
+        # Parse patterns like "Agent A", "Organization 1", "[EMAIL-1]"
+        for ptype, fn in _POLICY.items():
+            if ptype == PIIType.PERSON and pseudo.startswith("Agent "):
+                letter = pseudo.replace("Agent ", "")
+                idx = _letter_to_index(letter)
+                counters[ptype] = max(counters.get(ptype, 0), idx + 1)
+            elif ptype == PIIType.ORG and pseudo.startswith("Organization "):
+                num = int(pseudo.replace("Organization ", "")) - 1
+                counters[ptype] = max(counters.get(ptype, 0), num + 1)
+            elif pseudo.startswith("[") and pseudo.endswith("]"):
+                tag = pseudo[1:pseudo.index("-")]
+                type_map = {v: k for k, v in {
+                    "EMAIL": PIIType.EMAIL, "PHONE": PIIType.PHONE, "NI": PIIType.NI_NUMBER,
+                    "CARD": PIIType.CREDIT_CARD, "IBAN": PIIType.IBAN, "SSN": PIIType.SSN,
+                    "ADDRESS": PIIType.ADDRESS, "DOB": PIIType.DOB, "MEDICAL": PIIType.MEDICAL,
+                    "REDACTED": PIIType.OTHER,
+                }.items()}
+                if tag in type_map:
+                    num = int(pseudo[pseudo.index("-")+1:-1]) - 1
+                    counters[type_map[tag]] = max(counters.get(type_map[tag], 0), num + 1)
+    return counters
+
+
+def _letter_to_index(s: str) -> int:
+    """A->0, B->1, ..., Z->25, AA->26, ..."""
+    idx = 0
+    for i, ch in enumerate(reversed(s)):
+        idx += (ord(ch) - ord('A') + 1) * (26 ** i)
+    return idx - 1
 
 
 def build_master_mapping(spans) -> MasterMapping:

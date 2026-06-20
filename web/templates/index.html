@@ -347,6 +347,7 @@
         const STAGES = [
             { key: 'ingesting', label: 'Document Ingestion', icon: '📄' },
             { key: 'detecting_regex', label: 'Regex Detection', icon: '🔍' },
+            { key: 'checking_memory', label: 'Memory Check (Cognee)', icon: '💾' },
             { key: 'detecting_llm', label: 'LLM Detection (EXO)', icon: '🧠' },
             { key: 'redacting_text', label: 'Text Redaction (Cognee)', icon: '✏️' },
             { key: 'redacting_pdf', label: 'PDF True Redaction', icon: '🚫' },
@@ -478,6 +479,14 @@
                 }
                 return 'Pattern matching...';
             }
+            if (key === 'checking_memory') {
+                if (stages.memory_entities !== undefined) {
+                    const known = stages.known_spans !== undefined ? `, ${stages.known_spans} from memory` : '';
+                    const new_ents = stages.new_entities !== undefined ? `, ${stages.new_entities} new` : '';
+                    return `${stages.memory_entities} entities in memory${known}${new_ents}`;
+                }
+                return 'Checking entity memory...';
+            }
             if (key === 'detecting_llm') {
                 if (stages.llm_error) return 'LLM unavailable, skipped';
                 if (stages.llm_spans !== undefined) {
@@ -520,6 +529,12 @@
             }
             if (stages.replacements !== undefined) {
                 addStat('Replacements', stages.replacements);
+            }
+            if (stages.memory_entities !== undefined) {
+                addStat('Memory Entities', stages.memory_entities);
+            }
+            if (stages.new_entities !== undefined) {
+                addStat('New Entities', stages.new_entities);
             }
             if (stages.chunks !== undefined) {
                 addStat('Chunks', stages.chunks);

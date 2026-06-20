@@ -91,11 +91,11 @@ class Chunk:
 class PIISpan:
     span_id: str
     doc_id: str
-    chunk_id: Optional[str]
     type: PIIType
     text: str
     char_start: int
     char_end: int
+    chunk_id: Optional[str] = None
     bbox: Optional[BBox] = None
     confidence: float = 1.0
     source: PIISource = "regex"

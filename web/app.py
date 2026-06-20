@@ -34,8 +34,14 @@ from pipeline.detect import detect_regex, detect_llm, merge_spans
 from pipeline.redact import apply_redactions, create_redaction_job
 from pipeline.exo_client import ExoClient
 from schema import PIISpan, Document
-from cognee_mem.pipeline import PipelineOutput, run as cognee_run
+from cognee_mem.pipeline import (
+    PipelineOutput, run as cognee_run, run_with_memory_first
+)
 from cognee_mem.pseudonyms import MasterMapping
+from cognee_mem.memory_store import (
+    add_to_memory, get_memory_stats, MEMORY_PATH
+)
+
 
 app = Flask(__name__, template_folder="templates")
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 MB uploads
@@ -78,9 +84,9 @@ def _mapping_to_dict(mapping: MasterMapping) -> List[dict]:
             "canonical_id": ent.canonical_id,
             "type": ent.type.value,
             "canonical_text": ent.canonical_text,
-            "aliases": ent.aliases,
+            "aliases": list(ent.aliases),
             "pseudonym": pseudonym,
-            "doc_ids": ent.doc_ids,
+            "doc_ids": list(ent.doc_ids),
         })
     return out
 
@@ -240,7 +246,17 @@ def api_download_text(job_id: str):
 # ---------------------------------------------------------------------------
 
 def _process_job(job_id: str) -> None:
-    """Background worker: ingest → detect → text redaction → PDF redaction → Cognee memory."""
+    """Background worker: memory-first pipeline.
+    
+    1. Ingest document
+    2. Regex detect (fast)
+    3. Check memory - skip known entities
+    4. LLM detect only on unknown chunks (limited to avoid timeout)
+    5. Merge spans + dedup + pseudonym assignment
+    6. Store new entities in memory
+    7. Redact text deterministically
+    8. True PDF redaction with pseudonyms
+    """
     job = _jobs[job_id]
     doc_id = job_id
     stages: dict = {}
@@ -272,7 +288,7 @@ def _process_job(job_id: str) -> None:
         _set_job_status(job, "ingesting", 20, stages=stages)
 
         # ------------------------------------------------------------------
-        # 2. DETECTION (regex + optional LLM)
+        # 2. REGEX DETECTION (fast, exact)
         # ------------------------------------------------------------------
         full_text = "".join(p.text for p in document.pages)
         stages["text_length"] = len(full_text)
@@ -281,45 +297,58 @@ def _process_job(job_id: str) -> None:
         regex_spans = detect_regex(full_text, doc_id)
         stages["regex_spans"] = len(regex_spans)
 
-        llm_spans: List[PIISpan] = []
+        # ------------------------------------------------------------------
+        # 3. MEMORY-FIRST: Find known entities in text + check memory
+        # ------------------------------------------------------------------
+        _set_job_status(job, "checking_memory", 35, stages=stages)
+        
+        # Find known entities from memory that appear in this document
+        from cognee_mem.memory_store import find_known_spans_in_text
+        memory_spans = find_known_spans_in_text(full_text, doc_id)
+        stages["memory_spans"] = len(memory_spans)
+        
+        # Merge all spans before running the pipeline
+        all_spans = list({s.span_id: s for s in (regex_spans + memory_spans)}.values())
+        
+        # Select chunks to run LLM on (unknown content, limited to 3)
+        unknown_chunks = []
         if _use_llm():
-            _set_job_status(job, "detecting_llm", 40, stages=stages)
-            try:
-                client = ExoClient()
-                llm_spans = detect_llm(chunks, client)
-                stages["llm_spans"] = len(llm_spans)
-            except RuntimeError as exc:
-                # LLM unavailable — continue with regex only, but record it.
-                stages["llm_error"] = str(exc)
-                stages["llm_spans"] = 0
-        else:
-            stages["llm_skipped"] = True
-
-        _set_job_status(job, "merging", 50, stages=stages)
-        merged = merge_spans(regex_spans, llm_spans)
-        job["spans"] = merged
-        stages["total_spans"] = len(merged)
-
-        _set_job_status(job, "detecting", 55, stages=stages)
-
-        # ------------------------------------------------------------------
-        # 3. TEXT REDACTION (Cognee pipeline — deterministic, offline)
-        # ------------------------------------------------------------------
-        _set_job_status(job, "redacting_text", 60, stages=stages)
-        doc_texts = {doc_id: full_text}
-        pipeline_out = cognee_run(doc_texts, merged)
+            unknown_chunks = [c for c in chunks if len(c.text) > 30][:3]
+            stages["llm_chunks"] = len(unknown_chunks)
+        
+        # Run the full memory-first pipeline
+        pipeline_out = run_with_memory_first(
+            doc_texts={doc_id: full_text},
+            spans=all_spans,
+            memory_path=None,
+            llm_chunks=unknown_chunks if _use_llm() else None,
+        )
+        
+        stages["memory_entities"] = pipeline_out.memory_stats["total_entities"]
+        stages["memory_after"] = get_memory_stats()["total_entities"]
+        stages["new_entities"] = stages["memory_after"] - stages["memory_entities"]
+        stages["llm_spans"] = len(pipeline_out.llm_spans)
+        
+        # Persist new entities to memory for future runs
+        add_to_memory(pipeline_out.mapping)
+        stages["memory_after"] = get_memory_stats()["total_entities"]
+        stages["new_entities"] = stages["memory_after"] - stages["memory_entities"]
+        
+        all_spans = list({s.span_id: s for s in (regex_spans + memory_spans + pipeline_out.llm_spans)}.values())
+        job["spans"] = all_spans
+        stages["total_spans"] = len(all_spans)
+        stages["regex_spans"] = len(regex_spans)
+        
         redacted_text = pipeline_out.redacted_texts.get(doc_id, full_text)
         job["redacted_text"] = redacted_text
         job["mapping"] = _mapping_to_dict(pipeline_out.mapping)
-        stages["replacements"] = sum(
-            r.replacements for r in pipeline_out.results
-        )
+        stages["replacements"] = sum(r.replacements for r in pipeline_out.results)
         stages["entities"] = len(pipeline_out.mapping.entities)
 
         _set_job_status(job, "redacting_text", 70, stages=stages)
 
         # ------------------------------------------------------------------
-        # 4. REDACTED OUTPUT (clean, organised layout)
+        # 6. REDACTED PDF OUTPUT (with pseudonyms)
         # ------------------------------------------------------------------
         _set_job_status(job, "redacting_pdf", 75, stages=stages)
         redacted_path, pseudonym_path, extracted_dir = _build_output_paths(
@@ -333,7 +362,7 @@ def _process_job(job_id: str) -> None:
         if is_pdf:
             redact_job = create_redaction_job(
                 doc_id=doc_id,
-                spans=merged,
+                spans=all_spans,
                 output_path=redacted_path,
             )
             apply_redactions(
@@ -346,14 +375,13 @@ def _process_job(job_id: str) -> None:
             job["output_path"] = redacted_path
             stages["pdf_output"] = redacted_path
         else:
-            # For DOCX/TXT: redacted text is the primary output.
             Path(redacted_path).write_text(redacted_text, encoding="utf-8")
             job["output_path"] = redacted_path
             stages["text_output"] = redacted_path
 
-        _set_job_status(job, "redacting_pdf", 80, stages=stages)
+        _set_job_status(job, "writing_outputs", 85, stages=stages)
 
-        # Write pseudonym mapping to the organised output folder.
+        # Write pseudonym mapping
         with open(pseudonym_path, "w", encoding="utf-8") as f:
             json.dump({
                 "doc_id": doc_id,
@@ -363,25 +391,19 @@ def _process_job(job_id: str) -> None:
             }, f, indent=2)
         stages["pseudonym_path"] = pseudonym_path
 
-        _set_job_status(job, "writing_outputs", 85, stages=stages)
-
         # ------------------------------------------------------------------
-        # 5. COGNEE MEMORY GRAPH (optional, needs exo)
+        # 7. COGNEE MEMORY GRAPH (optional, real cognee package)
         # ------------------------------------------------------------------
         if _use_cognee_memory():
             _set_job_status(job, "building_memory", 90, stages=stages)
             try:
                 import asyncio
-                # Cognee pipeline.run_with_memory is async and needs exo.
-                asyncio.run(
-                    _run_cognee_with_memory(doc_texts, merged)
-                )
+                asyncio.run(_run_cognee_with_memory({doc_id: full_text}, all_spans))
                 stages["cognee_memory"] = "ok"
             except Exception as exc:
-                # Cognee memory is optional — don't fail the whole job.
                 stages["cognee_memory"] = f"skipped: {str(exc)}"
         else:
-            stages["cognee_memory"] = "disabled"
+            stages["cognee_memory"] = "disabled (using JSON memory)"
 
         _set_job_status(job, "done", 100, stages=stages)
 

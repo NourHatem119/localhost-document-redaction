@@ -72,21 +72,22 @@ def apply_redactions(
     # Group spans by page (convert from 1-indexed to 0-indexed for PyMuPDF).
     spans_by_page: dict[int, List[PIISpan]] = {}
     for span in job.spans:
-        if char_bboxes:
+        if char_bboxes and span.source == "regex":
             bboxes = []
             for offset in range(span.char_start, span.char_end):
                 key = (span.doc_id, offset)
                 if key in char_bboxes:
                     bboxes.extend(char_bboxes[key])
-            for page_no, bbox in bboxes:
-                spans_by_page.setdefault(page_no - 1, []).append(span)
-        else:
-            # Fallback: search on every page (0-indexed).
-            for page_no in range(len(doc)):
-                page = doc.load_page(page_no)
-                rects = page.search_for(span.text)
-                if rects:
-                    spans_by_page.setdefault(page_no, []).append(span)
+            if bboxes:
+                for page_no, bbox in bboxes:
+                    spans_by_page.setdefault(page_no - 1, []).append(span)
+                continue  # Successfully found bboxes, skip search_for fallback
+        # Fallback: search on every page (0-indexed) for LLM/memory spans or regex spans with no bboxes.
+        for page_no in range(len(doc)):
+            page = doc.load_page(page_no)
+            rects = page.search_for(span.text)
+            if rects:
+                spans_by_page.setdefault(page_no, []).append(span)
 
     # Group image regions by page (1-indexed → 0-indexed).
     regions_by_page: dict[int, List[ImageRegion]] = {}
