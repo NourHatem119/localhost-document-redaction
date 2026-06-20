@@ -33,6 +33,7 @@ from schema import PIIType
 from dataset.schema import DocType, ImageAsset, LabeledSpan, SyntheticDocument
 from dataset.personas import _recurring_personas, get_persona, seed
 from dataset.images import make_id_card, make_signature
+from dataset.filler import pad_to_words, WORDS_PER_PAGE
 
 DOCS_DIR = os.path.join(os.path.dirname(__file__), "docs")
 
@@ -105,6 +106,9 @@ def build_employment_letter(doc_id: str, persona) -> SyntheticDocument:
     b.line("details are incorrect.")
     b.line()
 
+    pad_to_words(b, DocType.EMPLOYMENT_LETTER, target_words=3 * WORDS_PER_PAGE)
+    b.line().line()
+
     b.line("Yours sincerely,").line()
     b.add("HR Department, ").pii(persona.org, PIIType.ORG, pid).line()
 
@@ -146,7 +150,10 @@ def build_hr_onboarding(doc_id: str, persona, images_dir: str) -> SyntheticDocum
     b.line()
     b.line("I confirm the above details are correct and that I have the right")
     b.add("to work for ").pii(persona.org, PIIType.ORG, pid).line(".")
-    b.line()
+
+    pad_to_words(b, DocType.HR_ONBOARDING, target_words=3 * WORDS_PER_PAGE)
+    b.line().line()
+
     b.line("Signed (employee signature below):")
 
     os.makedirs(images_dir, exist_ok=True)
@@ -171,6 +178,54 @@ def build_hr_onboarding(doc_id: str, persona, images_dir: str) -> SyntheticDocum
         spans=b.spans,
         images=images,
         image_paths=[a.path for a in images],
+        persona_ids=[pid],
+    )
+
+
+def build_bank_statement(doc_id: str, persona) -> SyntheticDocument:
+    """A monthly bank statement (finance vertical). Exercises the financial
+    PII the regex layer covers but no other doc tests yet: IBAN and
+    CREDIT_CARD, plus SSN (LLM-only — no regex), alongside PERSON, ADDRESS,
+    DOB, EMAIL, PHONE, ORG.
+    """
+    pid = persona.persona_id
+    b = DocBuilder()
+
+    b.pii(persona.org, PIIType.ORG, pid).line()
+    b.line("Monthly Account Statement")
+    b.add("Statement period: 01 May 2026 to 31 May 2026").line().line()
+
+    b.add("Account holder: ").pii(persona.full_name, PIIType.PERSON, pid).line()
+    b.add("Registered address: ").pii(persona.address, PIIType.ADDRESS, pid).line()
+    b.add("Date of birth: ").pii(persona.dob, PIIType.DOB, pid).line()
+    b.add("IBAN: ").pii(persona.iban, PIIType.IBAN, pid).line()
+    b.add("Debit card ending: ").pii(persona.credit_card, PIIType.CREDIT_CARD, pid).line()
+    if persona.ssn:
+        b.add("Tax reference (SSN): ").pii(persona.ssn, PIIType.SSN, pid).line()
+    b.line()
+
+    b.line("Transactions")
+    b.line("  03 May  Direct debit - Northern Energy        -84.20")
+    b.line("  09 May  Card payment - Waitrose Leeds         -52.16")
+    b.line("  15 May  Salary credit                       +2,940.00")
+    b.line("  22 May  Transfer to savings                   -400.00")
+    b.line("  28 May  Card payment - Trainline              -39.85")
+    b.line()
+
+    b.add("For queries contact us at ").pii(persona.email, PIIType.EMAIL, pid)
+    b.add(" or call ").pii(persona.phone, PIIType.PHONE, pid).line(".")
+
+    pad_to_words(b, DocType.BANK_STATEMENT, target_words=3 * WORDS_PER_PAGE)
+    b.line().line()
+
+    b.add("Issued by ").pii(persona.org, PIIType.ORG, pid).line(".")
+
+    return SyntheticDocument(
+        doc_id=doc_id,
+        doc_type=DocType.BANK_STATEMENT,
+        text=b.text(),
+        spans=b.spans,
+        image_paths=[],
         persona_ids=[pid],
     )
 
@@ -317,6 +372,13 @@ def main() -> None:
     doc2 = build_hr_onboarding("doc_0002", persona2, images_dir)
     entry2 = write_document(doc2)
     print(json.dumps(entry2, indent=2))
+
+    # doc_0003: bank statement for Daniel Walsh — exercises IBAN, CREDIT_CARD
+    # and SSN (Northgate Finance; seeds a third recurring entity for Cognee).
+    persona3 = next(p for p in _recurring_personas() if p.persona_id == "p_walsh")
+    doc3 = build_bank_statement("doc_0003", persona3)
+    entry3 = write_document(doc3)
+    print(json.dumps(entry3, indent=2))
 
 
 if __name__ == "__main__":
