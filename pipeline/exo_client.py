@@ -93,6 +93,7 @@ class ExoClient:
             "model": self.model,
             "messages": messages,
             "temperature": self.temperature,
+            "stream": False,
         }
         try:
             resp = requests.post(
