@@ -45,10 +45,15 @@ def _union_bbox(boxes: List[WordBox], start: int, end: int) -> Optional[BBox]:
 def chunk_page(
     page: Page,
     doc_id: str,
+    doc_offset: int = 0,
     window: int = DEFAULT_WINDOW,
     overlap: int = DEFAULT_OVERLAP,
 ) -> List[Chunk]:
-    """Chunk one page's canonical text into overlapping word windows."""
+    """Chunk one page's canonical text into overlapping word windows.
+
+    `doc_offset` is the cumulative character offset of this page within the
+    full document. All chunk `char_start`/`char_end` values are document-level.
+    """
     if window <= 0:
         raise ValueError("window must be positive")
     if not 0 <= overlap < window:
@@ -65,17 +70,17 @@ def chunk_page(
         w_slice = spans[w_start : w_start + window]
         if not w_slice:
             break
-        char_start = w_slice[0][0]
-        char_end = w_slice[-1][1]
+        char_start = w_slice[0][0] + doc_offset
+        char_end = w_slice[-1][1] + doc_offset
         chunks.append(
             Chunk(
                 chunk_id=f"{doc_id}_p{page.page_no}_c{idx}",
                 doc_id=doc_id,
                 page_no=page.page_no,
-                text=page.text[char_start:char_end],
+                text=page.text[w_slice[0][0] : w_slice[-1][1]],
                 char_start=char_start,
                 char_end=char_end,
-                bbox=_union_bbox(page.word_boxes, char_start, char_end),
+                bbox=_union_bbox(page.word_boxes, w_slice[0][0], w_slice[-1][1]),
             )
         )
         idx += 1
@@ -90,8 +95,11 @@ def chunk_document(
     window: int = DEFAULT_WINDOW,
     overlap: int = DEFAULT_OVERLAP,
 ) -> List[Chunk]:
-    """Chunk every page of a Document, preserving per-page offsets."""
+    """Chunk every page of a Document, preserving document-level offsets."""
     chunks: List[Chunk] = []
+    doc_offset = 0
     for page in doc.pages:
-        chunks.extend(chunk_page(page, doc.doc_id, window, overlap))
+        page_chunks = chunk_page(page, doc.doc_id, doc_offset, window, overlap)
+        chunks.extend(page_chunks)
+        doc_offset += len(page.text)
     return chunks
