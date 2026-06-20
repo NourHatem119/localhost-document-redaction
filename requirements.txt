@@ -1,0 +1,2 @@
+# Synthetic dataset generation
+Faker>=25.0.0
