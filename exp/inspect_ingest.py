@@ -8,7 +8,7 @@ canonical page text so you can eyeball correctness.
 Usage:
     python -m exp.inspect_ingest --doc dataset/docs/doc_0001/doc_0001.pdf
     python -m exp.inspect_ingest --doc dataset/docs/doc_0001/doc_0001.docx \\
-        --window 60 --overlap 10 --text-preview 400
+        --overlap-ratio 0.2 --text-preview 400
 """
 
 from __future__ import annotations
@@ -35,8 +35,12 @@ def main() -> None:
     parser.add_argument(
         "--doc", default="dataset/docs/doc_0001/doc_0001.pdf", help="path to a PDF/DOCX"
     )
-    parser.add_argument("--window", type=int, default=120, help="chunk window (words)")
-    parser.add_argument("--overlap", type=int, default=20, help="chunk overlap (words)")
+    parser.add_argument(
+        "--overlap-ratio",
+        type=float,
+        default=0.2,
+        help="fraction of an adjacent paragraph to overlap (0-1)",
+    )
     parser.add_argument(
         "--text-preview", type=int, default=240, help="chars of page text to show"
     )
@@ -87,8 +91,8 @@ def main() -> None:
             print(f"  {ref.image_id}  page={ref.page_no}  bbox={_fmt_bbox(ref.bbox)}")
             print(f"      -> {ref.path}")
 
-    chunks = chunk_document(doc, window=args.window, overlap=args.overlap)
-    _rule(f"CHUNKS (window={args.window}, overlap={args.overlap})")
+    chunks = chunk_document(doc, overlap_ratio=args.overlap_ratio)
+    _rule(f"CHUNKS (overlap_ratio={args.overlap_ratio})")
     print(f"count       : {len(chunks)}")
     page_by_no = {p.page_no: p for p in doc.pages}
     mismatches = 0

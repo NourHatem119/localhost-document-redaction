@@ -44,7 +44,7 @@ from ingest.parse import parse_document
 from ingest.chunk import chunk_document
 
 doc = parse_document("dataset/docs/doc_0001/doc_0001.pdf")
-chunks = chunk_document(doc, window=120, overlap=20)
+chunks = chunk_document(doc, overlap_ratio=0.2)
 
 # Offsets are sacred: this holds for every chunk.
 page = doc.pages[0]
@@ -69,16 +69,31 @@ words' boxes (PDF only); `None` when no geometry is available.
 
 ## Chunking
 
-Fixed-size **overlapping word windows** so a span straddling a boundary is still
-wholly contained in a neighbouring window.
+**One chunk per paragraph**, with **sentence-snapped overlap** into the
+neighbouring paragraphs so a span near a boundary still sits wholly inside a
+chunk and the LLM always sees whole sentences as context.
+
+- Paragraphs are split on blank lines (`\n\n`). PDF gets these boundaries from
+  PyMuPDF block separators; DOCX/TXT already have them.
+- For each side, the overlap target is ~20% (by word count) of the adjacent
+  paragraph, then **extended outward to the enclosing sentence**:
+  - the previous paragraph's tail is prepended from the **start of the sentence**
+    containing its 80% mark;
+  - the next paragraph's head is appended through the **end of the sentence**
+    containing its 20% mark.
+- Snapping only ever grows the overlap, so effective overlap is `>= 20%` and is
+  never a mid-sentence fragment.
 
 | Param | Default | Notes |
 |---|---|---|
-| `window` | 120 | words per chunk; enough context for LLM name/address detection |
-| `overlap` | 20 | words shared with the previous window |
+| `overlap_ratio` | `0.2` | fraction of an adjacent paragraph (by words) targeted before sentence-snapping; range `[0, 1)` |
 
-Short documents fit in a single chunk; overlap only produces multiple chunks
-once a page exceeds `window` words.
+Because overlap regions are contiguous with the paragraph in canonical text,
+`chunk.text == page.text[char_start:char_end]` always holds.
+
+Sentence segmentation is a simple regex on `.!?` followed by whitespace/end.
+Abbreviations like "Dr." may over-split a sentence, which only widens overlap
+slightly and never breaks the offset contract.
 
 ## Image extraction
 

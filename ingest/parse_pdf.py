@@ -24,9 +24,11 @@ _WORDS_SORT_KEY = (5, 6, 7)  # block, line, word — i.e. reading order
 def _page_text_and_boxes(page: "fitz.Page") -> Tuple[str, List[WordBox]]:
     """Build canonical page text from positioned words.
 
-    Words are joined with single spaces within a line and newlines between
-    lines, so the flat text stays readable while every word keeps an exact
-    char range aligned to its bbox.
+    Words are joined with single spaces within a line, a single newline between
+    lines of the same block, and a blank line ("\n\n") between blocks. PyMuPDF
+    blocks approximate paragraphs, so the blank-line separator gives downstream
+    paragraph-based chunking real boundaries to split on. Every word keeps an
+    exact char range aligned to its bbox regardless of the separators.
     """
     words = page.get_text("words")
     if not words:
@@ -37,14 +39,17 @@ def _page_text_and_boxes(page: "fitz.Page") -> Tuple[str, List[WordBox]]:
     parts: List[str] = []
     boxes: List[WordBox] = []
     cursor = 0
+    prev_block_no: int | None = None
     prev_line_key: Tuple[int, int] | None = None
 
     for x0, y0, x1, y1, word, block_no, line_no, _word_no in words:
         line_key = (block_no, line_no)
         if prev_line_key is None:
             sep = ""
+        elif block_no != prev_block_no:
+            sep = "\n\n"  # block boundary ≈ paragraph break
         elif line_key != prev_line_key:
-            sep = "\n"
+            sep = "\n"  # line break within the same block
         else:
             sep = " "
         if sep:
@@ -58,6 +63,7 @@ def _page_text_and_boxes(page: "fitz.Page") -> Tuple[str, List[WordBox]]:
 
         bbox: BBox = (x0, y0, x1, y1)
         boxes.append((start, end, bbox))
+        prev_block_no = block_no
         prev_line_key = line_key
 
     return "".join(parts), boxes
