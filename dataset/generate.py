@@ -23,14 +23,16 @@ from dataclasses import asdict
 from typing import List
 
 from docx import Document as DocxDocument
+from docx.shared import Inches as DocxInches
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
 from schema import PIIType
-from dataset.schema import DocType, LabeledSpan, SyntheticDocument
-from dataset.personas import get_persona, seed
+from dataset.schema import DocType, ImageAsset, LabeledSpan, SyntheticDocument
+from dataset.personas import _recurring_personas, get_persona, seed
+from dataset.images import make_driving_licence
 
 DOCS_DIR = os.path.join(os.path.dirname(__file__), "docs")
 
@@ -116,6 +118,55 @@ def build_employment_letter(doc_id: str, persona) -> SyntheticDocument:
     )
 
 
+def build_hr_onboarding(doc_id: str, persona, images_dir: str) -> SyntheticDocument:
+    """An HR onboarding / right-to-work verification form. Exercises text PII
+    (PERSON, ADDRESS, DOB, NI_NUMBER, EMAIL, PHONE, ORG, OTHER) and embeds a
+    realistic UK driving licence carrying a real face (FACE), the card layout
+    (ID), printed details (TEXT_PII) and a handwritten signature (SIGNATURE).
+    """
+    pid = persona.persona_id
+    b = DocBuilder()
+
+    b.line(persona.org).line()
+    b.line("NEW STARTER ONBOARDING & RIGHT-TO-WORK VERIFICATION").line()
+    b.add("Date: 20 June 2026").line().line()
+
+    b.add("Employee: ").pii(persona.full_name, PIIType.PERSON, pid).line()
+    b.add("Home address: ").pii(persona.address, PIIType.ADDRESS, pid).line()
+    b.add("Date of birth: ").pii(persona.dob, PIIType.DOB, pid).line()
+    b.add("National Insurance number: ").pii(persona.ni_number, PIIType.NI_NUMBER, pid).line()
+    if persona.other_id:
+        b.add("Passport number: ").pii(persona.other_id, PIIType.OTHER, pid).line()
+    b.add("Contact email: ").pii(persona.email, PIIType.EMAIL, pid).line()
+    b.add("Contact phone: ").pii(persona.phone, PIIType.PHONE, pid).line()
+    b.line()
+
+    b.line("Identity verified by UK driving licence (scan attached below).")
+    b.line()
+    b.line("I confirm the above details are correct and that I have the right")
+    b.add("to work for ").pii(persona.org, PIIType.ORG, pid).line(".")
+
+    os.makedirs(images_dir, exist_ok=True)
+    licence = make_driving_licence(
+        os.path.join(images_dir, "driving_licence.png"),
+        full_name=persona.full_name,
+        dob_iso=persona.dob,
+        address=persona.address,
+        persona_id=pid,
+    )
+    images = [licence]
+
+    return SyntheticDocument(
+        doc_id=doc_id,
+        doc_type=DocType.HR_ONBOARDING,
+        text=b.text(),
+        spans=b.spans,
+        images=images,
+        image_paths=[a.path for a in images],
+        persona_ids=[pid],
+    )
+
+
 def render_pdf(doc: SyntheticDocument, pdf_path: str) -> None:
     """Render the canonical text to a simple, single-column A4 PDF.
 
@@ -161,6 +212,18 @@ def render_pdf(doc: SyntheticDocument, pdf_path: str) -> None:
             c.drawString(left, y, visual_line)
             y -= leading
 
+    # Embed images below the text, scaled to fit the text column.
+    for asset in doc.images:
+        draw_w = min(asset.width, max_width)
+        draw_h = asset.height * (draw_w / asset.width)
+        if y - draw_h < bottom:
+            c.showPage()
+            c.setFont(font_name, font_size)
+            y = top
+        y -= leading
+        c.drawImage(asset.path, left, y - draw_h, width=draw_w, height=draw_h)
+        y -= draw_h + leading
+
     c.save()
 
 
@@ -173,6 +236,9 @@ def render_docx(doc: SyntheticDocument, docx_path: str) -> None:
     document = DocxDocument()
     for raw_line in doc.text.split("\n"):
         document.add_paragraph(raw_line)
+    for asset in doc.images:
+        # Scale to a sensible on-page width while preserving aspect ratio.
+        document.add_picture(asset.path, width=DocxInches(min(asset.width / 96.0, 5.0)))
     document.save(docx_path)
 
 
@@ -201,6 +267,16 @@ def write_document(doc: SyntheticDocument) -> dict:
         "spans": [
             {**asdict(s), "type": s.type.value} for s in doc.spans
         ],
+        "images": [
+            {
+                "image_id": a.image_id,
+                "path": os.path.relpath(a.path, doc_dir),
+                "width": a.width,
+                "height": a.height,
+                "regions": [asdict(r) for r in a.regions],
+            }
+            for a in doc.images
+        ],
     }
     with open(labels_path, "w", encoding="utf-8") as f:
         json.dump(labels, f, indent=2, ensure_ascii=False)
@@ -214,15 +290,25 @@ def write_document(doc: SyntheticDocument) -> dict:
         "txt": os.path.basename(txt_path),
         "labels": os.path.basename(labels_path),
         "n_spans": len(doc.spans),
+        "n_images": len(doc.images),
+        "n_regions": sum(len(a.regions) for a in doc.images),
     }
 
 
 def main() -> None:
     seed(20260620)
-    persona = get_persona(recurring_prob=1.0)
-    doc = build_employment_letter("doc_0001", persona)
-    entry = write_document(doc)
-    print(json.dumps(entry, indent=2))
+
+    persona1 = get_persona(recurring_prob=1.0)
+    doc1 = build_employment_letter("doc_0001", persona1)
+    entry1 = write_document(doc1)
+    print(json.dumps(entry1, indent=2))
+
+    # doc_0002: HR onboarding for John Smith, with embedded ID/face/signature.
+    persona2 = next(p for p in _recurring_personas() if p.persona_id == "p_smith")
+    images_dir = os.path.join(DOCS_DIR, "doc_0002", "images")
+    doc2 = build_hr_onboarding("doc_0002", persona2, images_dir)
+    entry2 = write_document(doc2)
+    print(json.dumps(entry2, indent=2))
 
 
 if __name__ == "__main__":

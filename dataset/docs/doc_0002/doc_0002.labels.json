@@ -1,0 +1,115 @@
+{
+  "doc_id": "doc_0002",
+  "doc_type": "HR_ONBOARDING",
+  "persona_ids": [
+    "p_smith"
+  ],
+  "spans": [
+    {
+      "type": "PERSON",
+      "text": "John Smith",
+      "char_start": 110,
+      "char_end": 120,
+      "persona_id": "p_smith"
+    },
+    {
+      "type": "ADDRESS",
+      "text": "14 Carlisle Road, Manchester, M20 4PL",
+      "char_start": 135,
+      "char_end": 172,
+      "persona_id": "p_smith"
+    },
+    {
+      "type": "DOB",
+      "text": "1984-03-12",
+      "char_start": 188,
+      "char_end": 198,
+      "persona_id": "p_smith"
+    },
+    {
+      "type": "NI_NUMBER",
+      "text": "QQ123456C",
+      "char_start": 226,
+      "char_end": 235,
+      "persona_id": "p_smith"
+    },
+    {
+      "type": "OTHER",
+      "text": "503271845",
+      "char_start": 253,
+      "char_end": 262,
+      "persona_id": "p_smith"
+    },
+    {
+      "type": "EMAIL",
+      "text": "john.smith@meridian-health.co.uk",
+      "char_start": 278,
+      "char_end": 310,
+      "persona_id": "p_smith"
+    },
+    {
+      "type": "PHONE",
+      "text": "07700 900142",
+      "char_start": 326,
+      "char_end": 338,
+      "persona_id": "p_smith"
+    },
+    {
+      "type": "ORG",
+      "text": "Meridian Health NHS Trust",
+      "char_start": 482,
+      "char_end": 507,
+      "persona_id": "p_smith"
+    }
+  ],
+  "images": [
+    {
+      "image_id": "driving_licence",
+      "path": "images/driving_licence.png",
+      "width": 1012,
+      "height": 638,
+      "regions": [
+        {
+          "label": "ID",
+          "bbox": [
+            4,
+            4,
+            1007,
+            633
+          ],
+          "persona_id": "p_smith"
+        },
+        {
+          "label": "FACE",
+          "bbox": [
+            30,
+            106,
+            293,
+            434
+          ],
+          "persona_id": "p_smith"
+        },
+        {
+          "label": "TEXT_PII",
+          "bbox": [
+            30,
+            104,
+            982,
+            468
+          ],
+          "persona_id": "p_smith"
+        },
+        {
+          "label": "SIGNATURE",
+          "bbox": [
+            679,
+            505,
+            982,
+            608
+          ],
+          "persona_id": "p_smith"
+        }
+      ]
+    }
+  ]
+}

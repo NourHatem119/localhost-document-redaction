@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional
 
-from schema import PIIType
+from schema import BBox, ImageLabel, PIIType
 
 
 class DocType(str, Enum):
@@ -64,12 +64,41 @@ class LabeledSpan:
 
 
 @dataclass
+class LabeledImageRegion:
+    """Ground-truth PII region inside an embedded image. `bbox` is in pixel
+    coordinates of the image itself ([x0, y0, x1, y1]) — the space the CV /
+    OCR vision track operates in. Maps onto a contract `ImageRegion`.
+    """
+
+    label: ImageLabel  # "FACE" | "ID" | "SIGNATURE" | "TEXT_PII"
+    bbox: BBox
+    persona_id: Optional[str] = None  # links the region to an entity
+
+
+@dataclass
+class ImageAsset:
+    """An image embedded in a document plus the gold regions inside it."""
+
+    image_id: str
+    path: str
+    width: int
+    height: int
+    regions: List[LabeledImageRegion] = field(default_factory=list)
+
+
+@dataclass
 class SyntheticDocument:
-    """A generated document with text and gold-standard PII labels."""
+    """A generated document with text and gold-standard PII labels.
+
+    `images` carries gold image regions (faces / IDs / signatures / text-PII)
+    for the vision track. `image_paths` is kept as a convenience list of the
+    same paths for any consumer that only needs the files.
+    """
 
     doc_id: str
     doc_type: DocType
     text: str
     spans: List[LabeledSpan] = field(default_factory=list)
+    images: List[ImageAsset] = field(default_factory=list)
     image_paths: List[str] = field(default_factory=list)
     persona_ids: List[str] = field(default_factory=list)
