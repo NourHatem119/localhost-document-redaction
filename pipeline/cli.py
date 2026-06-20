@@ -17,7 +17,9 @@ import sys
 from ingest.parse import parse_document
 from ingest.chunk import chunk_document
 from pipeline.detect import detect_regex, detect_llm, merge_spans
+from pipeline.detect_images import detect_document_images
 from pipeline.redact import apply_redactions, create_redaction_job
+from pipeline.redact_images import reinsert_redacted_images
 from pipeline.exo_client import ExoClient
 
 
@@ -52,10 +54,21 @@ def run(input_path: str, output_path: str, use_llm: bool = False) -> str:
 
     print(f"[INFO] Detected {len(all_spans)} spans ({len(regex_spans)} regex, {len(llm_spans)} LLM)")
 
-    # 3. Redact.
+    # 3. Redact text.
     job = create_redaction_job(doc_id=doc_id, spans=all_spans, output_path=output_path)
     result_path = apply_redactions(job, input_path, output_path, char_bboxes=char_bboxes if char_bboxes else None)
     print(f"[INFO] Redacted PDF written to: {result_path}")
+
+    # 4. Redact images (faces + OCR text). PDF-only: the blurred images are
+    # written back into the already-text-redacted output PDF in place.
+    if document.images and input_path.lower().endswith(".pdf"):
+        regions_by_image = detect_document_images(document)
+        if regions_by_image:
+            n = reinsert_redacted_images(
+                document, regions_by_image, result_path, result_path
+            )
+            print(f"[INFO] Redacted {n} image(s) in: {result_path}")
+
     return result_path
 
 

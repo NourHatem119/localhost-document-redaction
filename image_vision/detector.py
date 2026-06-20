@@ -8,6 +8,7 @@ pipeline never crashes if a single detector fails.
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 import uuid
 import logging
@@ -21,6 +22,51 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from schema import ImageRegion, BBox, ImageLabel, ImageSource
 
 # ---------------------------------------------------------------------------
+# YuNet face detector setup
+# ---------------------------------------------------------------------------
+
+# YuNet ONNX weights are bundled in-repo so face detection runs fully offline.
+# Requires OpenCV >= 4.7 for the 2023mar model format.
+_YUNET_MODEL_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "models",
+    "face_detection_yunet_2023mar.onnx",
+)
+# Score/NMS thresholds: 0.9 score keeps confident faces only; 0.3 NMS dedups
+# overlapping boxes. top_k caps candidate boxes before NMS.
+_YUNET_SCORE_THRESHOLD = 0.9
+_YUNET_NMS_THRESHOLD = 0.3
+_YUNET_TOP_K = 5000
+
+_yunet_detector: Optional["cv2.FaceDetectorYN"] = None
+
+
+def _get_yunet() -> Optional["cv2.FaceDetectorYN"]:
+    """Lazily build the YuNet detector, or None if weights/OpenCV unavailable.
+
+    The input size is a placeholder; it is reset per-image in detect_faces.
+    """
+    global _yunet_detector
+    if _yunet_detector is not None:
+        return _yunet_detector
+    if not hasattr(cv2, "FaceDetectorYN") or not os.path.isfile(_YUNET_MODEL_PATH):
+        return None
+    try:
+        _yunet_detector = cv2.FaceDetectorYN.create(
+            _YUNET_MODEL_PATH,
+            "",
+            (320, 320),
+            _YUNET_SCORE_THRESHOLD,
+            _YUNET_NMS_THRESHOLD,
+            _YUNET_TOP_K,
+        )
+        return _yunet_detector
+    except Exception as exc:
+        logging.warning("YuNet detector failed to initialize: %s", exc)
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Tesseract setup
 # ---------------------------------------------------------------------------
 
@@ -28,29 +74,53 @@ _TESSERACT_FOUND: Optional[bool] = None
 
 
 def _find_tesseract() -> bool:
-    """Probe common Windows Tesseract paths and configure pytesseract if found."""
+    """Locate the Tesseract binary cross-platform and configure pytesseract.
+
+    Resolution order: TESSERACT_CMD env override, then the binary on PATH
+    (Linux/macOS/Windows via shutil.which), then common fixed install paths.
+    Requires the `pytesseract` module; if it is missing, OCR is unavailable.
+    """
     global _TESSERACT_FOUND
     if _TESSERACT_FOUND is not None:
         return _TESSERACT_FOUND
 
-    candidates = [
-        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
-    ]
-    # Also allow environment override
+    try:
+        import pytesseract
+    except Exception:
+        # pip package not installed — OCR can't run regardless of the binary.
+        _TESSERACT_FOUND = False
+        return False
+
+    candidates = []
     env_path = os.environ.get("TESSERACT_CMD")
     if env_path:
-        candidates.insert(0, env_path)
+        candidates.append(env_path)
+    # PATH lookup covers Linux/macOS (`tesseract`) and Windows (`tesseract.exe`).
+    on_path = shutil.which("tesseract")
+    if on_path:
+        candidates.append(on_path)
+    # Common fixed locations as a last resort.
+    candidates.extend(
+        [
+            "/usr/bin/tesseract",
+            "/usr/local/bin/tesseract",
+            "/opt/homebrew/bin/tesseract",
+            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        ]
+    )
 
     for path in candidates:
-        if os.path.isfile(path):
-            try:
-                import pytesseract
-                pytesseract.pytesseract.tesseract_cmd = path
-                _TESSERACT_FOUND = True
-                return True
-            except Exception:
-                continue
+        if not (os.path.isfile(path) or shutil.which(path)):
+            continue
+        try:
+            pytesseract.pytesseract.tesseract_cmd = path
+            # Confirm the binary actually runs, not just that it exists.
+            pytesseract.get_tesseract_version()
+            _TESSERACT_FOUND = True
+            return True
+        except Exception:
+            continue
 
     _TESSERACT_FOUND = False
     return False
@@ -85,6 +155,69 @@ def _safe_read(image_path: str) -> Optional[np.ndarray]:
 # ---------------------------------------------------------------------------
 
 def detect_faces(image: np.ndarray, doc_id: str, image_id: str, page_no: int) -> List[ImageRegion]:
+    """Detect faces, preferring YuNet DNN and falling back to a Haar cascade.
+
+    YuNet (cv2.FaceDetectorYN) is far more robust to angle/occlusion than Haar
+    and runs offline from bundled ONNX weights. If the weights or OpenCV's YuNet
+    support are missing, fall back to the always-available Haar cascade.
+    """
+    detector = _get_yunet()
+    if detector is not None:
+        try:
+            return _detect_faces_yunet(detector, image, doc_id, image_id, page_no)
+        except Exception as exc:
+            logging.warning("YuNet face detection failed, falling back to Haar: %s", exc)
+    return _detect_faces_haar(image, doc_id, image_id, page_no)
+
+
+def _detect_faces_yunet(
+    detector: "cv2.FaceDetectorYN",
+    image: np.ndarray,
+    doc_id: str,
+    image_id: str,
+    page_no: int,
+) -> List[ImageRegion]:
+    """Run YuNet on a single image and return FACE regions."""
+    regions: List[ImageRegion] = []
+    h, w = image.shape[:2]
+    if h < 1 or w < 1:
+        return regions
+
+    # YuNet requires the input size to match the image it scores.
+    detector.setInputSize((w, h))
+    _retval, faces = detector.detect(image)
+    if faces is None:
+        return regions
+
+    for face in faces:
+        # face = [x, y, w, h, 5x landmark coords..., score]
+        x, y, fw, fh = face[:4]
+        score = float(face[-1])
+        # Clamp to image bounds; YuNet can return slightly out-of-frame boxes.
+        x0 = max(0, int(x))
+        y0 = max(0, int(y))
+        x1 = min(w, int(x + fw))
+        y1 = min(h, int(y + fh))
+        if x1 <= x0 or y1 <= y0:
+            continue
+        regions.append(
+            ImageRegion(
+                region_id=_new_region_id(),
+                doc_id=doc_id,
+                image_id=image_id,
+                page_no=page_no,
+                bbox=(float(x0), float(y0), float(x1), float(y1)),
+                label="FACE",
+                confidence=round(score, 3),
+                source="cv",
+            )
+        )
+    return regions
+
+
+def _detect_faces_haar(
+    image: np.ndarray, doc_id: str, image_id: str, page_no: int
+) -> List[ImageRegion]:
     """Detect faces using OpenCV Haar cascade (guaranteed offline fallback)."""
     regions: List[ImageRegion] = []
     try:
