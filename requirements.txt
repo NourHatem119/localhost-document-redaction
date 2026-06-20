@@ -5,3 +5,11 @@ reportlab>=4.0.0
 pillow>=10.0.0
 # DOCX rendering for mixed-format fixtures
 python-docx>=1.1.0
+
+# ── Pipeline / redaction ──
+PyMuPDF>=1.24.0          # fitz — PDF text extraction + true redaction
+requests>=2.31.0         # EXO / Ollama HTTP client
+
+# Optional: Presidio for structured PII detection (regex is built-in)
+# presidio-analyzer>=2.2.0
+# presidio-anonymizer>=2.2.0
