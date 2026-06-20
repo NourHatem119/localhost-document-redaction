@@ -117,6 +117,9 @@ def detect_llm(chunks: List[Chunk], client: Optional[ExoClient] = None) -> List[
             continue
 
         for span in raw_spans:
+            # Skip empty/whitespace-only spans from the LLM.
+            if not span.text or not span.text.strip():
+                continue
             # Fix offsets: search for the LLM text in chunk text.
             idx = _find_text_in_chunk(chunk.text, span.text)
             if idx == -1:
