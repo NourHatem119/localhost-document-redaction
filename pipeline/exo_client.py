@@ -108,11 +108,11 @@ class ExoClient:
 
     def _parse_response(self, content: str, chunk: Chunk) -> List[PIISpan]:
         """Extract JSON array from the LLM response, adjusting offsets."""
-        # Strip markdown fences if the model ignored instructions.
         content = content.strip()
+        # Strip markdown fences if the model ignored instructions.
         if content.startswith("```json"):
             content = content[7:]
-        if content.startswith("```"):
+        elif content.startswith("```"):
             content = content[3:]
         if content.endswith("```"):
             content = content[:-3]
@@ -120,25 +120,29 @@ class ExoClient:
 
         try:
             raw = json.loads(content)
-        except json.JSONDecodeError as exc:
-            # Try to extract the first JSON array from the text.
-            match = re.search(r"\[.*\]", content, re.DOTALL)
+        except json.JSONDecodeError:
+            # Try to extract the first JSON array from the text using non-greedy match.
+            match = re.search(r"\[.*?\]", content, re.DOTALL)
             if not match:
-                raise RuntimeError(f"LLM returned non-JSON: {content[:200]}") from exc
-            raw = json.loads(match.group(0))
+                # Last resort: look for any JSON array structure
+                match = re.search(r"\[.*\]", content, re.DOTALL)
+                if not match:
+                    raise RuntimeError(f"LLM returned non-JSON: {content[:200]}")
+            try:
+                raw = json.loads(match.group(0))
+            except json.JSONDecodeError as exc2:
+                raise RuntimeError(f"LLM returned non-JSON: {content[:200]}") from exc2
 
-        # Accept either a list directly, or a dict with a list inside (e.g. {"results": [...]}).
+        # Accept either a list directly, or a dict with a list inside.
         items: List[dict] = []
         if isinstance(raw, list):
             items = raw
         elif isinstance(raw, dict):
-            # Try common keys that might contain the array.
             for key in ("results", "spans", "data", "pii", "items"):
                 if key in raw and isinstance(raw[key], list):
                     items = raw[key]
                     break
             if not items:
-                # Try any list value in the dict.
                 for v in raw.values():
                     if isinstance(v, list):
                         items = v
@@ -157,7 +161,6 @@ class ExoClient:
             text = item.get("text", "")
             c_start = int(item.get("char_start", 0))
             c_end = int(item.get("char_end", 0))
-            # Adjust chunk-relative offsets to document-level.
             doc_start = chunk.char_start + c_start
             doc_end = chunk.char_start + c_end
             spans.append(
