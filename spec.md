@@ -62,7 +62,9 @@ Go say hi to the **Overmind and Captur reps in the first 30 minutes** — their 
                       └─────────────────────────────────────────────┘
 ```
 
-**The clean integration trick:** exo serves an OpenAI-compatible API at `http://localhost:52415/v1/chat/completions`. Point *both* your detection code *and* Cognee's LLM provider at that URL. One model, one endpoint, everything local.
+**The clean integration trick:** exo serves an OpenAI-compatible API at `http://localhost:52415/v1/chat/completions`. Point *both* your detection code *and* Cognee's **LLM** provider at that URL. One model, one endpoint, everything local.
+
+> **Update (build day):** this applies to the *LLM* only. Cognee's **embeddings** now run on **Fastembed** (local ONNX, CPU, no API key) instead of exo — so we don't depend on exo serving an `/embeddings` route, and the embedding side is guaranteed offline. Set this in `.env`, not in code (see §9).
 
 ---
 
@@ -125,7 +127,8 @@ The demo cannot exist without this, so A protects the critical path and ships th
 
 ### Person B — Memory Graph & Image Vision *(Cognee + Captur)*
 Two related sub-tracks; if time gets tight, ship Cognee first (it's the bigger visual + more partners care).
-- **Cognee:** `pip install cognee`, run local (LanceDB + NetworkX in-process, zero DB setup), point its LLM provider at exo's endpoint. Feed A's `PIISpan[]` → `cognee.add()` → `cognee.cognify()` to build the entity graph → dedup/normalize so "J. Smith" and "John Smith" collapse → cross-doc consistency (same entity redacted everywhere). Stand up `cognee ui` graph explorer for the demo.
+- **Cognee:** `uv pip install "cognee[fastembed]"` (==1.1.3), run local (LanceDB + **`ladybug`** in-process, zero DB setup), config via **`.env`** (LLM → exo, embeddings → Fastembed). Feed A's `PIISpan[]` → **`cognee.remember(..., node_set=[doc_id], self_improvement=False)`** to build the entity graph → dedup/normalize so "J. Smith" and "John Smith" collapse → cross-doc consistency (same entity redacted everywhere). Stand up `cognee ui` graph explorer for the demo.
+  > **Updates (build day):** (1) Cognee 1.1.3 **dropped the NetworkX graph adapter** — in-process default is now `ladybug` (same "no server, zero setup" property). (2) Using the **new API** (`remember`/`recall`/`forget`); old `add`/`cognify`/`search` still work as a fallback. (3) **Entity dedup runs deterministically offline (no exo)** for reliable consistency; Cognee's graph/embeddings augment fuzzy cases + power the demo visual. (4) Implements the **two-pass pipeline** (full design in `PERSON_B_COGNEE_TASKS.md`): Phase 2 builds an entity→pseudonym map ("John Smith"/"J. Smith" → *Agent A*) in memory; Phase 3 applies it for consistent replacement. **Decision (locked): Phase 3 redaction is DETERMINISTIC** — exact offset-based substitution from the master map, no LLM in the loop, so it's exact, reproducible, and verifiable offline. (An LLM rewrite can't guarantee "replace these and touch nothing else.") exo is used upstream (detection) and for Cognee's graph, not for applying redactions. Note vs §3: pseudonymization is the *cross-doc consistency* layer; Person A's PyMuPDF `apply_redactions()` is still what truly removes content in the final PDF — the two compose, they don't conflict. One offline entry point: `cognee_mem/pipeline.py` (`run()` = dedup→assign→redact; `run_with_memory()` adds the Cognee write, needs exo).
 - **Image PII:** receive images from A → run **Captur** on-device validation + CV: face detection (OpenCV/MediaPipe), **Tesseract OCR** to catch text-PII inside images, simple signature/ID-layout heuristics → emit `ImageRegion[]` with blur/box regions back to A for compositing.
 - **Deliverable by 16:00:** graph populated from real entities + image regions flowing for at least one image.
 
@@ -187,10 +190,16 @@ C is the integrator and demo owner — builds against mocks early so the UI exis
 git clone https://github.com/exo-explore/exo && cd exo && pip install -e .
 exo   # then hit http://localhost:52415/v1/chat/completions
 
-# Cognee — local, in-process graph+vector store
-pip install cognee
-#   point its LLM at exo:  LLM provider = openai-compatible, base_url=http://localhost:52415/v1
-#   core calls: cognee.add(...) -> cognee.cognify() -> cognee.search(...) ; cognee ui  for the graph explorer
+# Cognee — local, in-process graph+vector store (verified: cognee 1.1.3)
+uv pip install "cognee[fastembed]"     # [fastembed] = local CPU embeddings, no key, offline
+#   config lives in .env at the project root (Cognee reads it automatically):
+#     LLM_PROVIDER="openai"   LLM_ENDPOINT="http://localhost:52415/v1"   LLM_MODEL="openai/<exo-model>"   LLM_API_KEY="sk-local-exo"
+#     EMBEDDING_PROVIDER="fastembed"   EMBEDDING_MODEL="sentence-transformers/all-MiniLM-L6-v2"   EMBEDDING_DIMENSIONS="384"
+#     COGNEE_SKIP_CONNECTION_TEST="true"      # local small model: skip LLM preflight
+#   PRE-DOWNLOAD the embedding model WHILE ONLINE (else airplane mode fails on first embed):
+#     python -c "from fastembed import TextEmbedding; TextEmbedding('sentence-transformers/all-MiniLM-L6-v2')"
+#   core calls (new API): cognee.remember(...) -> cognee.recall(...) ; cognee.forget(everything=True) to reset ; cognee ui  for the graph explorer
+#   graph provider is in-process `ladybug` (NetworkX adapter removed in 1.1.3)
 
 # Pipeline + vision
 pip install pymupdf python-docx presidio-analyzer presidio-anonymizer \
