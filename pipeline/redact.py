@@ -22,11 +22,13 @@ from typing import List, Optional, Tuple
 import fitz  # PyMuPDF
 
 from schema import PIISpan, ImageRegion, RedactionJob, BBox
+from cognee_mem.pseudonyms import MasterMapping
 
 
 # Colour for redaction rectangles (black).
 _REDACT_FILL = (0, 0, 0)
 _REDACT_FILL_IMAGE = (0, 0, 0)
+_REDACT_TEXT_COLOR = (1, 1, 1)  # white text on black background
 
 
 def _to_fitz_rect(bbox: BBox) -> fitz.Rect:
@@ -38,6 +40,7 @@ def apply_redactions(
     input_path: str,
     output_path: Optional[str] = None,
     char_bboxes: Optional[dict] = None,
+    mapping: Optional[MasterMapping] = None,
 ) -> str:
     """Apply true redactions to a PDF and return the output path.
 
@@ -97,6 +100,10 @@ def apply_redactions(
 
         # Text redactions.
         for span in spans_by_page.get(page_idx, []):
+            # Look up the pseudonym for this span.
+            pseudonym = None
+            if mapping:
+                pseudonym = mapping.pseudonym_for(span.text)
             # Use char_bboxes for regex (exact offsets) and search_for for LLM (unreliable offsets).
             use_bbox = char_bboxes and span.source == "regex"
             if use_bbox:
@@ -112,17 +119,26 @@ def apply_redactions(
                     union = rects[0]
                     for r in rects[1:]:
                         union |= r
-                    page.add_redact_annot(union, fill=_REDACT_FILL)
+                    if pseudonym:
+                        page.add_redact_annot(union, fill=_REDACT_FILL, text=pseudonym, text_color=_REDACT_TEXT_COLOR, fontsize=10)
+                    else:
+                        page.add_redact_annot(union, fill=_REDACT_FILL)
                 else:
                     # Fallback: bbox lookup failed, use search_for.
                     rects = page.search_for(span.text)
                     for r in rects:
-                        page.add_redact_annot(r, fill=_REDACT_FILL)
+                        if pseudonym:
+                            page.add_redact_annot(r, fill=_REDACT_FILL, text=pseudonym, text_color=_REDACT_TEXT_COLOR, fontsize=10)
+                        else:
+                            page.add_redact_annot(r, fill=_REDACT_FILL)
             else:
                 # LLM spans: search_for is more reliable than LLM offsets.
                 rects = page.search_for(span.text)
                 for r in rects:
-                    page.add_redact_annot(r, fill=_REDACT_FILL)
+                    if pseudonym:
+                        page.add_redact_annot(r, fill=_REDACT_FILL, text=pseudonym, text_color=_REDACT_TEXT_COLOR, fontsize=10)
+                    else:
+                        page.add_redact_annot(r, fill=_REDACT_FILL)
 
         # Image region redactions (black box).
         for region in regions_by_page.get(page_idx, []):

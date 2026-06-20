@@ -341,6 +341,7 @@ def _process_job(job_id: str) -> None:
                 input_path=job["upload_path"],
                 output_path=redacted_path,
                 char_bboxes=char_bboxes if char_bboxes else None,
+                mapping=pipeline_out.mapping,
             )
             job["output_path"] = redacted_path
             stages["pdf_output"] = redacted_path
